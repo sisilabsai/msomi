@@ -35,6 +35,12 @@ st.markdown("""
 .price-tile { background:#141720;border:1px solid #1f2235;border-radius:10px;padding:14px 12px;text-align:center; }
 .price-up { color:#2ecc8a; }
 .price-down { color:#e05a5a; }
+.opp-card-long { background:#141720;border-radius:12px;padding:16px 20px;margin-bottom:12px;border:1px solid #2ecc8a44;border-left:5px solid #2ecc8a; }
+.opp-card-short { background:#141720;border-radius:12px;padding:16px 20px;margin-bottom:12px;border:1px solid #e05a5a44;border-left:5px solid #e05a5a; }
+.mkt-table { width:100%;border-collapse:collapse;font-size:.9em; }
+.mkt-table th { padding:8px 10px;text-align:left;color:#8890a8;border-bottom:1px solid #1f2235;font-weight:500; }
+.mkt-table td { padding:8px 10px;border-bottom:1px solid #141720; }
+.mkt-table tr:hover td { background:#141720; }
 .cb-ok { background:#0d2b1e;border:1px solid #2ecc8a;border-radius:8px;padding:12px 16px; }
 .cb-tripped { background:#2b0d0d;border:1px solid #e05a5a;border-radius:8px;padding:12px 16px; }
 .session-pill { display:inline-block;border-radius:5px;padding:3px 10px;margin:2px;font-size:0.78em;font-weight:600; }
@@ -177,76 +183,233 @@ def _cb_widget():
                     f'<small>Daily P&L: <strong>${state.daily_pnl:+.2f}</strong> '
                     f'· {state.trades_today} trade(s) today</small></div>',unsafe_allow_html=True)
 
+# ── Live Feed helpers ────────────────────────────────────────────────────────
+
+def _run_market_scan(symbols, timeframe):
+    """Scan all symbols and return list of {sym, price, snap, event}."""
+    results = []
+    bar = st.progress(0, text=f"Scanning {len(symbols)} symbols on {timeframe}…")
+    for i, sym in enumerate(symbols):
+        try:
+            event = signal_engine.evaluate_symbol(sym, timeframe=timeframe)
+            snap = signal_engine.snapshot_only(sym, timeframe=timeframe)
+            price = fetch_latest_price(sym)
+            results.append({"sym": sym, "price": price, "snap": snap, "event": event})
+        except Exception:
+            results.append({"sym": sym, "price": None, "snap": None, "event": None})
+        bar.progress((i + 1) / len(symbols), text=f"Scanned {sym}…")
+    bar.empty()
+    return results
+
+def _opportunity_card(r):
+    """Render a full signal card with entry/SL/TP/reasons."""
+    s = r["event"].signal
+    sym = r["sym"]
+    snap = r.get("snap")
+    price = r.get("price")
+    direction = s.direction
+    score = s.score
+    dc = "#2ecc8a" if direction == "LONG" else "#e05a5a"
+    arrow = "▲ LONG" if direction == "LONG" else "▼ SHORT"
+    sc = _score_color(score)
+    risk_dollar = cfg.account.balance * cfg.risk.per_trade_pct
+    sl_dist = abs(s.entry_price - s.stop_loss)
+    price_str = f"${price:,.5f}" if price else "–"
+    rsi_str = f"RSI {snap.rsi:.0f}" if snap else ""
+    trend_str = snap.trend_direction if snap else ""
+    bb_str = snap.bb_position if snap else ""
+    vol_str = f"Vol ×{snap.volume_ratio:.1f}{'  🔥' if snap.volume_spike else ''}" if snap else ""
+    squeeze_warn = "<br/><span style='color:#c9a84c;font-size:.8em'>🗜️ BB Squeeze — watch for breakout</span>" if snap and snap.bb_squeeze else ""
+    reasons_html = "".join(f"<li style='margin-bottom:2px'>{reason}</li>" for reason in s.reasons[:5])
+    card_cls = "opp-card-long" if direction == "LONG" else "opp-card-short"
+    st.markdown(f"""
+    <div class="{card_cls}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div>
+          <span style="font-size:1.25em;font-weight:700;color:#e0e0e0">{sym.replace('=X','').replace('-USD','')}</span>
+          <span style="color:{dc};font-size:1.1em;font-weight:600;margin-left:12px">{arrow}</span>
+          <span style="background:{sc}22;color:{sc};padding:3px 10px;border-radius:6px;font-size:.85em;margin-left:8px;font-weight:600">{score}/100</span>
+        </div>
+        <div style="text-align:right;color:#8890a8;font-size:.82em">
+          {rsi_str} &nbsp;·&nbsp; Trend: <strong style='color:#e0e0e0'>{trend_str}</strong> &nbsp;·&nbsp; {bb_str}<br/>
+          <span style="color:#e07bbb">{vol_str}</span> &nbsp;·&nbsp; Price: <strong style='color:#e0e0e0'>{price_str}</strong>{squeeze_warn}
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+        <div style="background:#0e1117;border-radius:6px;padding:8px;text-align:center">
+          <div style="color:#8890a8;font-size:.7em;text-transform:uppercase">Entry</div>
+          <div style="color:#e0e0e0;font-weight:600;font-family:monospace">{s.entry_price:.5f}</div>
+        </div>
+        <div style="background:#0e1117;border-radius:6px;padding:8px;text-align:center">
+          <div style="color:#8890a8;font-size:.7em;text-transform:uppercase">Stop Loss</div>
+          <div style="color:#e05a5a;font-weight:600;font-family:monospace">{s.stop_loss:.5f}</div>
+        </div>
+        <div style="background:#0e1117;border-radius:6px;padding:8px;text-align:center">
+          <div style="color:#8890a8;font-size:.7em;text-transform:uppercase">Take Profit</div>
+          <div style="color:#2ecc8a;font-weight:600;font-family:monospace">{s.take_profit:.5f}</div>
+        </div>
+        <div style="background:#0e1117;border-radius:6px;padding:8px;text-align:center">
+          <div style="color:#8890a8;font-size:.7em;text-transform:uppercase">R:R / Risk $</div>
+          <div style="color:#c9a84c;font-weight:600">{s.risk_reward:.1f}:1 &nbsp;/&nbsp; ${risk_dollar:.0f}</div>
+        </div>
+      </div>
+      <ul style="color:#8890a8;font-size:.85em;margin:4px 0 0;padding-left:18px">{reasons_html}</ul>
+    </div>""", unsafe_allow_html=True)
+
+def _market_overview_table(results):
+    """Render a compact market overview with live indicator values."""
+    header = (
+        "<table class='mkt-table'>"
+        "<thead><tr>"
+        "<th>Pair</th><th style='text-align:right'>Price</th>"
+        "<th style='text-align:center'>Trend</th><th style='text-align:center'>vs EMA200</th>"
+        "<th style='text-align:center'>RSI</th><th style='text-align:center'>MACD</th>"
+        "<th style='text-align:center'>BB Zone</th><th style='text-align:center'>Vol</th>"
+        "<th style='text-align:center'>ATR%</th><th style='text-align:center'>Signal</th>"
+        "</tr></thead><tbody>"
+    )
+    rows_html = ""
+    for r in results:
+        snap = r.get("snap")
+        price = r.get("price")
+        sym = r["sym"]
+        label = sym.replace("=X", "").replace("-USD", "")
+        if price is None and snap is None:
+            continue
+        price_str = (f"${price:,.2f}" if "-USD" in sym else f"{price:.5f}") if price else "–"
+        trend = snap.trend_direction if snap else "–"
+        tc = "#2ecc8a" if trend == "UP" else "#e05a5a" if trend == "DOWN" else "#8890a8"
+        ta = "▲" if trend == "UP" else "▼" if trend == "DOWN" else "–"
+        ema_pos = snap.price_vs_ema_trend if snap else "–"
+        ema_c = "#2ecc8a" if snap and "ABOVE" in (snap.price_vs_ema_trend or "") else "#e05a5a" if snap and "BELOW" in (snap.price_vs_ema_trend or "") else "#8890a8"
+        rsi = snap.rsi if snap else None
+        rsi_c = "#e05a5a" if rsi and rsi > 70 else "#2ecc8a" if rsi and rsi < 30 else "#c9a84c" if rsi else "#8890a8"
+        rsi_s = f"{rsi:.0f}" if rsi else "–"
+        macd_c_val = snap.macd_crossover if snap else "NONE"
+        macd_a = "↑" if macd_c_val == "BULLISH" else "↓" if macd_c_val == "BEARISH" else "–"
+        macd_c = "#2ecc8a" if macd_c_val == "BULLISH" else "#e05a5a" if macd_c_val == "BEARISH" else "#8890a8"
+        bb = snap.bb_position if snap else "–"
+        vol = f"×{snap.volume_ratio:.1f}" if snap else "–"
+        vol_c = "#e07bbb" if snap and snap.volume_spike else "#8890a8"
+        atr_s = f"{snap.atr_pct*100:.2f}%" if snap else "–"
+        event = r.get("event")
+        if event:
+            sig_d = event.signal.direction
+            sig_s = event.signal.score
+            sig_str = f"{'▲' if sig_d=='LONG' else '▼'} {sig_s}"
+            sig_c = "#2ecc8a" if sig_d == "LONG" else "#e05a5a"
+        else:
+            sig_str = "–"; sig_c = "#3b3f5c"
+        rows_html += (
+            f"<tr>"
+            f"<td style='font-weight:600;color:#e0e0e0'>{label}</td>"
+            f"<td style='text-align:right;font-family:monospace;color:#e0e0e0'>{price_str}</td>"
+            f"<td style='text-align:center;color:{tc};font-weight:600'>{ta} {trend}</td>"
+            f"<td style='text-align:center;color:{ema_c};font-size:.82em'>{ema_pos}</td>"
+            f"<td style='text-align:center;color:{rsi_c};font-weight:600'>{rsi_s}</td>"
+            f"<td style='text-align:center;color:{macd_c};font-weight:700;font-size:1.1em'>{macd_a}</td>"
+            f"<td style='text-align:center;color:#8890a8;font-size:.82em'>{bb}</td>"
+            f"<td style='text-align:center;color:{vol_c}'>{vol}</td>"
+            f"<td style='text-align:center;color:#8890a8'>{atr_s}</td>"
+            f"<td style='text-align:center;color:{sig_c};font-weight:700'>{sig_str}</td>"
+            f"</tr>"
+        )
+    st.markdown(header + rows_html + "</tbody></table>", unsafe_allow_html=True)
+
 # ── Page: Live Feed ───────────────────────────────────────────────────────────
 
 def _page_live_feed():
     st.title("📡 Live Feed")
-    st.markdown(_session_bar(),unsafe_allow_html=True)
-    st.caption(f"🕐 {datetime.now(timezone.utc).strftime('%H:%M UTC')}  —  Green = session currently open")
+    now_utc = datetime.now(timezone.utc)
+
+    # ── Session bar + clock ───────────────────────────────────────────────────
+    cl, cr = st.columns([3, 1])
+    with cl:
+        st.markdown(_session_bar(), unsafe_allow_html=True)
+        st.caption(f"🕐 {now_utc.strftime('%H:%M:%S UTC')}  —  Green = session currently open")
+    with cr:
+        do_scan = st.button("🔄 Scan Markets", use_container_width=True, type="primary")
+        primary_tf = cfg.signals.timeframes.get("primary", "1h") if hasattr(cfg.signals, "timeframes") else "1h"
+        if isinstance(primary_tf, dict): primary_tf = primary_tf.get("primary", "1h")
+        st.caption(f"Primary TF: **{primary_tf}**")
+
+    # ── Auto-scan: run on first load or on demand ─────────────────────────────
+    all_syms = cfg.watchlist.all_symbols
+    scan_stale = True
+    if "lf_scan_ts" in st.session_state and not do_scan:
+        age = (now_utc - st.session_state["lf_scan_ts"]).total_seconds()
+        scan_stale = age > 300  # refresh every 5 min
+
+    if scan_stale or do_scan:
+        results = _run_market_scan(all_syms, primary_tf)
+        st.session_state["lf_results"] = results
+        st.session_state["lf_scan_ts"] = now_utc
+    else:
+        results = st.session_state.get("lf_results", [])
+        age_s = int((now_utc - st.session_state["lf_scan_ts"]).total_seconds())
+        st.caption(f"📌 Cached scan — {age_s}s ago. Auto-refreshes every 5 min.")
+
+    # ── Active signals (opportunities) ───────────────────────────────────────
+    opportunities = [r for r in results if r.get("event")]
+    if opportunities:
+        st.markdown(f"### 🚨 {len(opportunities)} Active Signal{'s' if len(opportunities)!=1 else ''} — {primary_tf}")
+        for r in sorted(opportunities, key=lambda x: x["event"].signal.score, reverse=True):
+            _opportunity_card(r)
+    else:
+        st.info(
+            f"📊 No confirmed signals above **{cfg.signals.min_confidence_score}** on {primary_tf} right now.  "
+            f"All symbols are being monitored — check the **Heatmap** or **Charts** for setups building up."
+        )
     st.divider()
 
-    p7=journal.performance_summary(days=7)
-    p30=journal.performance_summary(days=30)
-    k1,k2,k3,k4,k5,k6=st.columns(6)
-    k1.metric("Trades (7d)",p7.get("total_trades",0))
-    k2.metric("Win Rate (7d)",f"{p7.get('win_rate',0)*100:.0f}%",
-              delta=f"{(p7.get('win_rate',0)-p30.get('win_rate',0))*100:+.0f}% vs 30d")
-    k3.metric("P&L (7d)",f"${p7.get('total_pnl',0):+.2f}")
-    k4.metric("Profit Factor (30d)",f"{p30.get('profit_factor',0):.2f}")
-    k5.metric("Avg Win (30d)",f"${p30.get('avg_win',0):.2f}")
-    k6.metric("Avg Loss (30d)",f"${p30.get('avg_loss',0):.2f}")
+    # ── Market overview table ─────────────────────────────────────────────────
+    st.markdown("### 📊 Market Snapshot")
+    st.caption("Live prices + indicator state for every watched symbol")
+    if results:
+        _market_overview_table(results)
     st.divider()
 
-    left,right=st.columns([1,2])
+    # ── Risk status + equity ─────────────────────────────────────────────────
+    left, right = st.columns([1, 2])
     with left:
         st.subheader("Risk Status")
         _cb_widget()
-        st.markdown("<br/>",unsafe_allow_html=True)
-        rc=cfg.risk
-        st.markdown(f"**Balance:** ${cfg.account.balance:,.2f} {cfg.account.currency}  \n"
-                    f"**Risk/Trade:** {rc.per_trade_pct*100:.1f}%  \n"
-                    f"**Daily Limit:** {rc.daily_loss_limit_pct*100:.1f}%  \n"
-                    f"**Max Streak:** {rc.max_consecutive_losses} losses  \n"
-                    f"**Min R:R:** {rc.min_risk_reward}:1")
+        st.markdown("<br/>", unsafe_allow_html=True)
+        rc = cfg.risk
+        st.markdown(
+            f"**Balance:** ${cfg.account.balance:,.2f} {cfg.account.currency}  \n"
+            f"**Risk/Trade:** {rc.per_trade_pct*100:.1f}%  ·  **Max $:** ${cfg.account.balance*rc.per_trade_pct:,.0f}  \n"
+            f"**Daily Limit:** {rc.daily_loss_limit_pct*100:.1f}%  \n"
+            f"**Max Streak:** {rc.max_consecutive_losses} losses  \n"
+            f"**Min R:R:** {rc.min_risk_reward}:1"
+        )
     with right:
-        st.subheader("Equity Curve")
-        fig=_equity_fig(cfg.account.balance)
+        st.subheader("Performance (30d)")
+        p7 = journal.performance_summary(days=7)
+        p30 = journal.performance_summary(days=30)
+        k1,k2,k3,k4,k5,k6 = st.columns(6)
+        k1.metric("Trades (7d)", p7.get("total_trades", 0))
+        k2.metric("Win Rate (7d)", f"{p7.get('win_rate',0)*100:.0f}%",
+                  delta=f"{(p7.get('win_rate',0)-p30.get('win_rate',0))*100:+.0f}% vs 30d")
+        k3.metric("P&L (7d)", f"${p7.get('total_pnl',0):+.2f}")
+        k4.metric("Profit Factor", f"{p30.get('profit_factor',0):.2f}")
+        k5.metric("Avg Win", f"${p30.get('avg_win',0):.2f}")
+        k6.metric("Avg Loss", f"${p30.get('avg_loss',0):.2f}")
+        fig = _equity_fig(cfg.account.balance)
         if fig.data:
-            st.plotly_chart(fig,use_container_width=True)
-        else:
-            st.info("No closed trades yet.")
+            st.plotly_chart(fig, use_container_width=True)
     st.divider()
 
-    st.subheader("Watchlist Prices")
-    def _tile(sym,crypto):
-        p=fetch_latest_price(sym)
-        label=sym.replace("-USD","").replace("=X","")
-        if p is None:
-            return f'<div class="price-tile"><strong>{label}</strong><br/><span style="color:#8890a8">N/A</span></div>'
-        fmt=f"${p:,.2f}" if crypto else f"{p:.5f}"
-        return f'<div class="price-tile"><strong>{label}</strong><br/><span class="price-up">{fmt}</span></div>'
-
-    st.caption("Forex")
-    fcols=st.columns(len(cfg.watchlist.forex))
-    for i,s in enumerate(cfg.watchlist.forex):
-        with fcols[i]: st.markdown(_tile(s,False),unsafe_allow_html=True)
-    st.caption("Crypto")
-    ccols=st.columns(len(cfg.watchlist.crypto))
-    for i,s in enumerate(cfg.watchlist.crypto):
-        with ccols[i]: st.markdown(_tile(s,True),unsafe_allow_html=True)
-
-    st.divider()
-    c1,c2=st.columns([1,3])
-    with c1:
-        if st.button("🔄 Refresh Now",use_container_width=True): st.rerun()
-    with c2:
-        if st.checkbox("Auto-refresh every 60 s",value=False):
-            import time
-            bar=st.progress(0,text="Refreshing in 60 s…")
-            for i in range(60):
-                time.sleep(1)
-                bar.progress((i+1)/60,text=f"Refreshing in {59-i} s…")
-            st.rerun()
+    # ── Auto-refresh ─────────────────────────────────────────────────────────
+    if st.checkbox("Auto-refresh every 60 s", value=False):
+        import time
+        bar = st.progress(0, text="Refreshing in 60 s…")
+        for i in range(60):
+            time.sleep(1)
+            bar.progress((i+1)/60, text=f"Refreshing in {59-i} s…")
+        st.session_state.pop("lf_results", None)
+        st.session_state.pop("lf_scan_ts", None)
+        st.rerun()
 
 # ── Page: Charts ─────────────────────────────────────────────────────────────
 
@@ -355,14 +518,19 @@ def _page_heatmap():
         st.warning("Select at least one timeframe."); return
 
     symbols=cfg.watchlist.all_symbols
-    if st.button("🔄 Scan All",type="primary"):
-        st.session_state["hm_dirty"]=True
+    col_a, col_b = st.columns([1, 3])
+    with col_a:
+        if st.button("🔄 Re-scan", type="primary", use_container_width=True):
+            st.session_state.pop("hm_rows", None)
+            st.session_state.pop("hm_tfs_cached", None)
 
-    if not st.session_state.get("hm_dirty"):
-        st.info("Click **Scan All** to populate the heatmap."); return
+    # Auto-load on first visit
+    cached_tfs = st.session_state.get("hm_tfs_cached")
+    if cached_tfs != sel_tfs or "hm_rows" not in st.session_state:
+        st.session_state.pop("hm_rows", None)
 
     total=len(symbols)*len(sel_tfs)
-    bar=st.progress(0,text="Scanning…")
+    bar=st.progress(0,text="Scanning markets…")
     rows=[]
     done=0
     for sym in symbols:
@@ -383,7 +551,10 @@ def _page_heatmap():
             bar.progress(done/total,text=f"Scanned {sym} [{tf}]…")
         rows.append(row)
     bar.empty()
+    st.session_state["hm_rows"] = rows
+    st.session_state["hm_tfs_cached"] = sel_tfs
 
+    rows = st.session_state["hm_rows"]
     df_heat=pd.DataFrame(rows).set_index("Symbol")
     z=df_heat.values
     text=[[f"{int(v):+d}" if v!=0 else "–" for v in r] for r in z]
