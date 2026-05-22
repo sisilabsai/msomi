@@ -683,12 +683,18 @@ def _page_planner():
 
             st.divider()
             p90=journal.performance_summary(days=90)
-            w=p90.get("win_rate",0.5)
-            aw=p90.get("avg_win",1); al=abs(p90.get("avg_loss",1)) or 1
-            b=aw/al; kelly=max(0.0,w-(1-w)/b)*100
+            w=p90.get("win_rate",0.5) or 0.5
+            aw=p90.get("avg_win") or 0.0
+            al=abs(p90.get("avg_loss") or 0.0)
+            if al>0 and aw>0:
+                b=aw/al
+                kelly=max(0.0,w-(1-w)/b)*100
+            else:
+                b=0.0; kelly=0.0
             st.markdown(f"**Kelly Criterion (90d):** {kelly:.1f}%  \n"
-                        f"Win rate: {w*100:.0f}%  ·  Avg W/L: {b:.2f}  \n"
-                        f"<small style='color:#8890a8'>½ Kelly = {kelly/2:.1f}% (recommended)</small>",
+                        f"Win rate: {w*100:.0f}%  ·  Avg W/L: {f'{b:.2f}' if b else 'N/A'}  \n"
+                        f"<small style='color:#8890a8'>½ Kelly = {kelly/2:.1f}% (recommended) "
+                        f"{'· Not enough trade history yet' if not (al and aw) else ''}</small>",
                         unsafe_allow_html=True)
 
 # ── Page: Backtest ────────────────────────────────────────────────────────────
