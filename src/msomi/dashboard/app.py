@@ -411,25 +411,128 @@ def _page_live_feed():
         st.session_state.pop("lf_scan_ts", None)
         st.rerun()
 
-# ── Page: Charts ─────────────────────────────────────────────────────────────
+# ── Analysis helpers ────────────────────────────────────────────────────────
+
+def _plain_english_analysis(snap):
+    """Plain-English bullet list explaining current indicator state."""
+    lines = []
+    if snap.trend_direction == "UP":
+        lines.append("✅ **Trend is UP** — price is above its moving averages. Conditions favour buyers.")
+    elif snap.trend_direction == "DOWN":
+        lines.append("🔴 **Trend is DOWN** — price is below moving averages. Conditions favour sellers.")
+    else:
+        lines.append("⚪ **Trend is mixed** — no clear direction yet. Best to wait for a clearer signal.")
+    if snap.price_vs_ema_trend:
+        if "ABOVE" in snap.price_vs_ema_trend:
+            lines.append("✅ **Above the 200 EMA** — the most important long-term bullish signal. Institutional money buys above this line.")
+        elif "BELOW" in snap.price_vs_ema_trend:
+            lines.append("⚠️ **Below the 200 EMA** — long-term trend is bearish. Be very careful with buy trades here.")
+    if snap.rsi > 70:
+        lines.append(f"⚠️ **RSI {snap.rsi:.0f} — Overbought.** Market moved up too fast. A pullback is likely. Avoid buying, watch for sells.")
+    elif snap.rsi < 30:
+        lines.append(f"✅ **RSI {snap.rsi:.0f} — Oversold.** Market dropped too fast. A bounce is likely. Watch for a buy opportunity.")
+    elif snap.rsi > 55:
+        lines.append(f"✅ **RSI {snap.rsi:.0f}** — Bullish momentum, not yet overbought. Good conditions for buyers.")
+    elif snap.rsi < 45:
+        lines.append(f"🔴 **RSI {snap.rsi:.0f}** — Bearish momentum. Sellers are in control.")
+    else:
+        lines.append(f"⚪ **RSI {snap.rsi:.0f}** — Neutral. The market is balanced between buyers and sellers.")
+    if snap.macd_crossover == "BULLISH":
+        lines.append("✅ **MACD bullish crossover** — momentum just flipped upward. This is an entry signal many traders use.")
+    elif snap.macd_crossover == "BEARISH":
+        lines.append("🔴 **MACD bearish crossover** — momentum just flipped downward. Sellers are taking control.")
+    elif snap.macd_hist > 0:
+        lines.append("⚪ **MACD histogram positive** — bullish momentum ongoing, no fresh crossover yet.")
+    else:
+        lines.append("⚪ **MACD histogram negative** — bearish pressure, no fresh crossover yet.")
+    if snap.bb_position:
+        bp = snap.bb_position.upper()
+        if "UPPER" in bp:
+            lines.append("⚠️ **Near upper Bollinger Band** — price is stretched to the upside. Possible reversal zone. Don't chase longs here.")
+        elif "LOWER" in bp:
+            lines.append("✅ **Near lower Bollinger Band** — price has stretched to the downside. Possible bounce zone.")
+        else:
+            lines.append("⚪ **Inside Bollinger Bands** — market is in a normal range, not at an extreme.")
+    if snap.bb_squeeze:
+        lines.append("⚡ **Bollinger Band Squeeze** — volatility compressing. A large breakout move is building. Watch for direction!")
+    if snap.volume_spike:
+        lines.append(f"🔥 **Volume spike ({snap.volume_ratio:.1f}× normal)** — professionals are actively moving in. This confirms the move.")
+    elif snap.volume_ratio > 1.5:
+        lines.append(f"📈 **Above-average volume ({snap.volume_ratio:.1f}×)** — good confirmation of the move.")
+    return lines
+
+def _verdict_from_snap(snap, event=None):
+    """Return (label, color, emoji, score, subtitle) for current conditions."""
+    if event:
+        s = event.signal
+        if s.direction == "LONG":
+            label = "STRONG BUY" if s.score >= 75 else "BUY"
+            color = "#2ecc8a"; emoji = "⬆"
+        else:
+            label = "STRONG SELL" if s.score >= 75 else "SELL"
+            color = "#e05a5a"; emoji = "⬇"
+        return label, color, emoji, s.score, f"Confluence score: {s.score}/100"
+    if snap is None:
+        return "NO DATA", "#3b3f5c", "–", 0, "Could not load data"
+    bull = 0; bear = 0
+    if snap.trend_direction == "UP": bull += 2
+    elif snap.trend_direction == "DOWN": bear += 2
+    if snap.price_vs_ema_trend and "ABOVE" in (snap.price_vs_ema_trend or ""): bull += 1
+    elif snap.price_vs_ema_trend and "BELOW" in (snap.price_vs_ema_trend or ""): bear += 1
+    if snap.rsi < 40: bull += 1
+    elif snap.rsi > 60: bear += 1
+    if snap.macd_crossover == "BULLISH": bull += 2
+    elif snap.macd_crossover == "BEARISH": bear += 2
+    net = bull - bear
+    score = min(90, 50 + abs(net) * 7)
+    if net >= 4: return "STRONG BUY", "#2ecc8a", "⬆", score, f"{bull} bullish signals, {bear} bearish"
+    elif net >= 2: return "BUY", "#2ecc8a", "↑", score, f"Bullish leaning — {bull} bull vs {bear} bear"
+    elif net <= -4: return "STRONG SELL", "#e05a5a", "⬇", score, f"{bear} bearish signals, {bull} bullish"
+    elif net <= -2: return "SELL", "#e05a5a", "↓", score, f"Bearish leaning — {bear} bear vs {bull} bull"
+    else: return "WAIT / NEUTRAL", "#8890a8", "↔", 50, f"Mixed signals — no clear edge ({bull} bull, {bear} bear)"
+
+def _strategy_health(report):
+    """Return (emoji, color, rating, description) for a backtest report."""
+    if report.total_trades < 5:
+        return "⚠️", "#c9a84c", "Too few trades", "Run over a longer period or lower the min score for meaningful results."
+    score = 0
+    if report.win_rate >= 55: score += 2
+    elif report.win_rate >= 45: score += 1
+    pf = report.profit_factor if report.profit_factor != float("inf") else 999
+    if pf >= 2.0: score += 2
+    elif pf >= 1.5: score += 1
+    if report.sharpe_ratio >= 1.5: score += 2
+    elif report.sharpe_ratio >= 0.5: score += 1
+    if report.max_drawdown_pct <= 10: score += 2
+    elif report.max_drawdown_pct <= 20: score += 1
+    if score >= 7: return "🏆", "#2ecc8a", "Excellent", "Strong historical performance. High win rate, low drawdown, positive expectancy."
+    elif score >= 5: return "✅", "#7bc67e", "Good", "Solid strategy. Profitable with manageable risk."
+    elif score >= 3: return "⚠️", "#c9a84c", "Average", "Makes money but needs better market conditions or refined parameters."
+    else: return "❌", "#e05a5a", "Poor", "This configuration has not performed well historically. Try different settings."
+
+# ── Page: Trade Analyzer ─────────────────────────────────────────────────────
 
 def _page_charts():
-    st.title("📈 Charts")
+    st.title("🎯 Trade Analyzer")
+    st.caption("Pick a market. Get a clear recommendation with exact entry, stop loss, and take profit.")
     c1,c2,c3=st.columns([2,1,1])
     with c1: symbol=st.selectbox("Symbol",cfg.watchlist.all_symbols,key="chart_sym")
     with c2: timeframe=st.selectbox("Timeframe",["5m","15m","1h","4h","1d"],index=2,key="chart_tf")
     with c3: periods=st.selectbox("Candles",[60,120,200,500],index=1,key="chart_periods")
 
     o1,o2,o3=st.columns(3)
-    show_emas=o1.checkbox("EMA Overlays",value=True)
+    show_emas=o1.checkbox("EMA Lines",value=True)
     show_bb=o2.checkbox("Bollinger Bands",value=True)
     show_vwap=o3.checkbox("VWAP",value=True)
 
-    with st.spinner(f"Loading {symbol} [{timeframe}]…"):
+    with st.spinner(f"Analyzing {symbol} [{timeframe}]…"):
         fig,df=_get_chart_df(symbol,timeframe,periods,show_emas,show_bb,show_vwap)
+        event=signal_engine.evaluate_symbol(symbol,timeframe=timeframe)
+        snap=signal_engine.snapshot_only(symbol,timeframe=timeframe)
+        price=fetch_latest_price(symbol)
 
     if not fig.data:
-        st.warning("Could not load chart data."); return
+        st.warning("Could not load data for this symbol."); return
     st.plotly_chart(fig,use_container_width=True)
 
     if df is not None and not df.empty:
@@ -474,38 +577,134 @@ def _page_charts():
                              yaxis=dict(showgrid=True,gridcolor="#1a1d2e"))
             st.plotly_chart(vf,use_container_width=True)
 
-    snap=signal_engine.snapshot_only(symbol,timeframe=timeframe)
-    if snap:
-        st.subheader("Indicator Values")
-        c1,c2,c3,c4,c5,c6,c7=st.columns(7)
-        c1.metric("Trend",snap.trend_direction)
-        c2.metric("vs EMA200",snap.price_vs_ema_trend)
-        c3.metric("RSI",f"{snap.rsi:.1f}",snap.rsi_signal)
-        # FIX: macd_crossover is a str, not a number
-        macd_delta=("↑ bullish" if snap.macd_crossover=="BULLISH"
-                    else ("↓ bearish" if snap.macd_crossover=="BEARISH" else "–"))
-        c4.metric("MACD Hist",f"{snap.macd_hist:.5f}",macd_delta)
-        c5.metric("BB Zone",snap.bb_position)
-        c6.metric("Vol Ratio",f"{snap.volume_ratio:.2f}×","🔥 Spike" if snap.volume_spike else None)
-        c7.metric("ATR%",f"{snap.atr_pct*100:.2f}%")
-        if snap.bb_squeeze:
-            st.warning("🗜️ Bollinger Band squeeze — potential breakout incoming.")
+    # ── RSI / MACD / Volume sub-panels ─────────────────────────────────────
+    if df is not None and not df.empty:
+        tail=60
+        s1,s2,s3=st.columns(3)
+        with s1:
+            rsi_fig=go.Figure()
+            rsi_fig.add_trace(go.Scatter(x=df.index[-tail:],y=df["rsi"].iloc[-tail:],
+                                         mode="lines",line=dict(color="#c9a84c",width=1.5),name="RSI"))
+            rsi_fig.add_hline(y=70,line_dash="dot",line_color="#e05a5a",line_width=1)
+            rsi_fig.add_hline(y=30,line_dash="dot",line_color="#2ecc8a",line_width=1)
+            rsi_fig.add_hrect(y0=70,y1=100,fillcolor="rgba(224,90,90,0.05)",line_width=0)
+            rsi_fig.add_hrect(y0=0,y1=30,fillcolor="rgba(46,204,138,0.05)",line_width=0)
+            rsi_fig.update_layout(template="plotly_dark",paper_bgcolor="#0e1117",plot_bgcolor="#0e1117",
+                                  height=180,margin=dict(l=0,r=0,t=30,b=0),showlegend=False,
+                                  title=dict(text="RSI",font=dict(color="#c9a84c",size=12)),
+                                  yaxis=dict(range=[0,100],showgrid=True,gridcolor="#1a1d2e"),
+                                  xaxis=dict(showgrid=True,gridcolor="#1a1d2e"))
+            st.plotly_chart(rsi_fig,use_container_width=True)
+        with s2:
+            mc=["#2ecc8a" if v>=0 else "#e05a5a" for v in df["macd_hist"].iloc[-tail:]]
+            mf=go.Figure()
+            mf.add_trace(go.Bar(x=df.index[-tail:],y=df["macd_hist"].iloc[-tail:],marker_color=mc,name="Hist"))
+            mf.add_trace(go.Scatter(x=df.index[-tail:],y=df["macd"].iloc[-tail:],
+                                    mode="lines",line=dict(color="#7b9fe0",width=1),name="MACD"))
+            mf.add_trace(go.Scatter(x=df.index[-tail:],y=df["macd_signal"].iloc[-tail:],
+                                    mode="lines",line=dict(color="#e07bbb",width=1),name="Signal"))
+            mf.update_layout(template="plotly_dark",paper_bgcolor="#0e1117",plot_bgcolor="#0e1117",
+                              height=180,margin=dict(l=0,r=0,t=30,b=0),showlegend=False,
+                              title=dict(text="MACD",font=dict(color="#c9a84c",size=12)),
+                              xaxis=dict(showgrid=True,gridcolor="#1a1d2e"),
+                              yaxis=dict(showgrid=True,gridcolor="#1a1d2e"))
+            st.plotly_chart(mf,use_container_width=True)
+        with s3:
+            vc=["#2ecc8a" if c>=o else "#e05a5a"
+                for c,o in zip(df["close"].iloc[-tail:],df["open"].iloc[-tail:])]
+            vf=go.Figure(go.Bar(x=df.index[-tail:],y=df["volume"].iloc[-tail:],marker_color=vc,name="Volume"))
+            vf.update_layout(template="plotly_dark",paper_bgcolor="#0e1117",plot_bgcolor="#0e1117",
+                             height=180,margin=dict(l=0,r=0,t=30,b=0),showlegend=False,
+                             title=dict(text="Volume",font=dict(color="#c9a84c",size=12)),
+                             xaxis=dict(showgrid=True,gridcolor="#1a1d2e"),
+                             yaxis=dict(showgrid=True,gridcolor="#1a1d2e"))
+            st.plotly_chart(vf,use_container_width=True)
 
-        rg=go.Figure(go.Indicator(mode="gauge+number",value=snap.rsi,
-                                   domain={"x":[0,1],"y":[0,1]},
-                                   title={"text":"RSI","font":{"color":"#c9a84c"}},
-                                   gauge={"axis":{"range":[0,100],"tickcolor":"#8890a8"},
-                                          "bar":{"color":"#c9a84c"},
-                                          "bgcolor":"#141720","bordercolor":"#1f2235",
-                                          "steps":[{"range":[0,30],"color":"#0d2b1e"},
-                                                   {"range":[30,70],"color":"#141720"},
-                                                   {"range":[70,100],"color":"#2b0d0d"}],
-                                          "threshold":{"line":{"color":"white","width":2},
-                                                       "thickness":0.75,"value":snap.rsi}}))
-        rg.update_layout(paper_bgcolor="#0e1117",plot_bgcolor="#0e1117",
-                         font={"color":"#8890a8"},height=200,margin=dict(l=20,r=20,t=30,b=0))
-        g1,_=st.columns([1,2])
-        with g1: st.plotly_chart(rg,use_container_width=True)
+    st.divider()
+
+    # ── Trade Recommendation ─────────────────────────────────────────────────
+    st.markdown("### What should I do?")
+    if snap is None:
+        st.warning("Could not compute indicators. Try a different symbol or timeframe."); return
+
+    label,color,emoji,score,subtitle=_verdict_from_snap(snap,event)
+    analysis=_plain_english_analysis(snap)
+    left,right=st.columns([1,2])
+
+    with left:
+        st.markdown(f"""
+        <div style="background:{color}15;border:2px solid {color};border-radius:16px;
+             padding:28px 20px;text-align:center;margin-bottom:16px">
+          <div style="font-size:2.8em;margin-bottom:4px">{emoji}</div>
+          <div style="color:{color};font-size:1.7em;font-weight:700;letter-spacing:1px">{label}</div>
+          <div style="color:#8890a8;font-size:.85em;margin-top:8px">{subtitle}</div>
+        </div>""",unsafe_allow_html=True)
+        if event:
+            s=event.signal
+            sl_dist=abs(s.entry_price-s.stop_loss)
+            dollar_risk=cfg.account.balance*cfg.risk.per_trade_pct
+            if "=X" in symbol:
+                size_str=f"{dollar_risk/(sl_dist*100_000):.4f} lots" if sl_dist>0 else "–"
+            else:
+                size_str=f"{dollar_risk/sl_dist:.4f} units" if sl_dist>0 else "–"
+            potential_profit=dollar_risk*s.risk_reward
+            st.markdown(f"""
+            <div style="background:#141720;border-radius:12px;padding:16px">
+              <div style="color:#8890a8;font-size:.75em;text-transform:uppercase;margin-bottom:12px;letter-spacing:1px">Trade Plan</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <div><div style="color:#8890a8;font-size:.7em">Entry</div>
+                  <div style="font-family:monospace;color:#e0e0e0;font-weight:600">{s.entry_price:.5f}</div></div>
+                <div><div style="color:#8890a8;font-size:.7em">Stop Loss</div>
+                  <div style="font-family:monospace;color:#e05a5a;font-weight:600">{s.stop_loss:.5f}</div></div>
+                <div><div style="color:#8890a8;font-size:.7em">Take Profit</div>
+                  <div style="font-family:monospace;color:#2ecc8a;font-weight:600">{s.take_profit:.5f}</div></div>
+                <div><div style="color:#8890a8;font-size:.7em">R:R Ratio</div>
+                  <div style="color:#c9a84c;font-weight:600">{s.risk_reward:.1f}:1</div></div>
+              </div>
+              <div style="margin-top:14px;border-top:1px solid #1f2235;padding-top:12px">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                  <div><div style="color:#8890a8;font-size:.7em">Position Size</div>
+                    <div style="color:#e0e0e0;font-weight:600">{size_str}</div></div>
+                  <div><div style="color:#8890a8;font-size:.7em">Max You Lose</div>
+                    <div style="color:#e05a5a;font-weight:600">${dollar_risk:.2f}</div></div>
+                  <div><div style="color:#8890a8;font-size:.7em">Potential Gain</div>
+                    <div style="color:#2ecc8a;font-weight:600">${potential_profit:.2f}</div></div>
+                  <div><div style="color:#8890a8;font-size:.7em">Account Risk</div>
+                    <div style="color:#c9a84c;font-weight:600">{cfg.risk.per_trade_pct*100:.1f}%</div></div>
+                </div>
+              </div>
+            </div>""",unsafe_allow_html=True)
+        else:
+            st.info("No confirmed signal at the current threshold.  \nTry a different timeframe, or check the **Live Feed** for active opportunities.")
+            if snap.atr_pct>0:
+                ep=price or snap.vwap or 1.0
+                sl_long=ep-snap.atr; sl_short=ep+snap.atr
+                tp_long=ep+snap.atr*cfg.risk.min_risk_reward
+                tp_short=ep-snap.atr*cfg.risk.min_risk_reward
+                st.markdown(f"""**ATR-based levels** (if you want to set manual orders):  
+*Long:* Entry `{ep:.5f}` · SL `{sl_long:.5f}` · TP `{tp_long:.5f}`  
+*Short:* Entry `{ep:.5f}` · SL `{sl_short:.5f}` · TP `{tp_short:.5f}`""")
+
+    with right:
+        st.markdown("#### What each indicator is saying")
+        for line in analysis:
+            st.markdown(line)
+        if snap.bb_squeeze:
+            st.warning("⚡ **Action required:** A breakout is forming. Set a price alert and be ready to act quickly.")
+        if event:
+            st.markdown("#### Why this signal fired")
+            for reason in event.signal.reasons:
+                st.markdown(f"• {reason}")
+            if event.signal.components:
+                cf=go.Figure(go.Bar(x=list(event.signal.components.values()),
+                                    y=list(event.signal.components.keys()),
+                                    orientation="h",marker_color="#c9a84c"))
+                cf.update_layout(template="plotly_dark",paper_bgcolor="#0e1117",plot_bgcolor="#0e1117",
+                                  height=200,margin=dict(l=0,r=0,t=10,b=0),
+                                  title=dict(text="Score Breakdown",font=dict(color="#c9a84c",size=12)),
+                                  xaxis=dict(showgrid=True,gridcolor="#1a1d2e"),
+                                  yaxis=dict(showgrid=True,gridcolor="#1a1d2e"))
+                st.plotly_chart(cf,use_container_width=True)
 
 # ── Page: Heatmap ─────────────────────────────────────────────────────────────
 
@@ -868,60 +1067,196 @@ def _page_planner():
                         f"{'· Not enough trade history yet' if not (al and aw) else ''}</small>",
                         unsafe_allow_html=True)
 
-# ── Page: Backtest ────────────────────────────────────────────────────────────
+# ── Page: Strategy Lab ───────────────────────────────────────────────────────
 
 def _page_backtest():
-    st.title("🔬 Backtest")
-    with st.form("bt_form"):
-        c1,c2,c3,c4=st.columns(4)
-        with c1: bt_sym=st.selectbox("Symbol",cfg.watchlist.all_symbols)
-        with c2: bt_tf=st.selectbox("Timeframe",["1h","4h","1d"])
-        with c3: bt_start=st.date_input("Start",value=pd.to_datetime(cfg.backtest.default_start))
-        with c4: bt_end=st.date_input("End",value=pd.to_datetime(cfg.backtest.default_end))
-        min_sc=st.slider("Min Score",40,90,cfg.signals.min_confidence_score)
-        run=st.form_submit_button("▶ Run Backtest",type="primary",use_container_width=True)
+    st.title("🔬 Strategy Lab")
+    st.caption("See how this strategy would have performed historically. Build confidence before risking real money.")
 
-    if run:
+    # Defaults (overridden by expander widgets when open)
+    bt_sym=cfg.watchlist.all_symbols[0]; bt_tf="1h"
+    bt_start=pd.to_datetime(cfg.backtest.default_start).date()
+    bt_end=pd.to_datetime(cfg.backtest.default_end).date()
+    min_sc=40; run_bt=False
+
+    with st.expander("⚙️ Settings", expanded=False):
+        c1,c2,c3,c4=st.columns(4)
+        with c1: bt_sym=st.selectbox("Symbol",cfg.watchlist.all_symbols,key="sl_sym")
+        with c2: bt_tf=st.selectbox("Timeframe",["1h","4h","1d"],key="sl_tf")
+        with c3: bt_start=st.date_input("Start",value=pd.to_datetime(cfg.backtest.default_start),key="sl_start")
+        with c4: bt_end=st.date_input("End",value=pd.to_datetime(cfg.backtest.default_end),key="sl_end")
+        min_sc=st.slider(
+            "Minimum Signal Score — lower = more trades found, higher = only the best setups",
+            30,90,40,
+            help="Your live threshold is 65. Set to 40 here to get enough historical trades to analyse."
+        )
+        run_bt=st.button("▶ Run Simulation",type="primary",use_container_width=True,key="sl_run")
+
+    # Auto-run on first load
+    cache_key=f"sl_{bt_sym}_{bt_tf}_{min_sc}_{bt_start}_{bt_end}"
+    if "sl_cache_key" not in st.session_state or st.session_state["sl_cache_key"]!=cache_key:
+        run_bt=True
+
+    if run_bt:
         from msomi.backtest.engine import BacktestEngine
-        with st.spinner(f"Backtesting {bt_sym} [{bt_tf}] {bt_start}→{bt_end}…"):
+        with st.spinner(f"Simulating {bt_sym} [{bt_tf}] {bt_start} → {bt_end} at min score {min_sc}…"):
             engine=BacktestEngine(cfg)
             report=engine.run(symbol=bt_sym,timeframe=bt_tf,
                               start=str(bt_start),end=str(bt_end),min_score=min_sc)
+        st.session_state["sl_report"]=report
+        st.session_state["sl_cache_key"]=cache_key
 
-        m1,m2,m3,m4,m5,m6=st.columns(6)
-        m1.metric("Trades",report.total_trades); m2.metric("Win Rate",f"{report.win_rate:.1f}%")
-        m3.metric("Sharpe",f"{report.sharpe_ratio:.2f}"); m4.metric("Max DD",f"{report.max_drawdown_pct:.1f}%")
-        m5.metric("Return",f"{report.total_return_pct:+.1f}%")
-        m6.metric("Profit Factor",f"{report.profit_factor:.2f}" if report.profit_factor else "N/A")
+    report=st.session_state.get("sl_report")
+    if report is None:
+        st.info("Configure settings above and click **Run Simulation**."); return
 
-        if report.equity_curve:
-            arr=np.array(report.equity_curve)
-            ef=go.Figure(go.Scatter(y=arr,mode="lines",line=dict(color="#c9a84c",width=2),
-                                    fill="tozeroy",fillcolor="rgba(201,168,76,0.07)"))
-            ef.update_layout(template="plotly_dark",paper_bgcolor="#0e1117",plot_bgcolor="#0e1117",
-                             height=320,margin=dict(l=0,r=0,t=10,b=0),
-                             title=dict(text=f"Equity — {bt_sym}",font=dict(color="#c9a84c")),
-                             xaxis=dict(title="Trade #",showgrid=True,gridcolor="#1a1d2e"),
-                             yaxis=dict(title="Equity ($)",showgrid=True,gridcolor="#1a1d2e",side="right"))
-            st.plotly_chart(ef,use_container_width=True)
+    # ── Zero trades explanation ───────────────────────────────────────────────
+    if report.total_trades==0:
+        st.markdown(f"""
+        <div style="background:#1a1520;border-left:4px solid #c9a84c;border-radius:10px;padding:20px 24px">
+          <h4 style="color:#c9a84c;margin:0 0 8px">⚠️ No trades found (min score {min_sc})</h4>
+          <p style="color:#8890a8;margin:0">The strategy did not find signals above {min_sc} for {bt_sym} [{bt_tf}] in this period.</p>
+          <p style="color:#8890a8;margin:8px 0 0"><strong style="color:#e0e0e0">Try this:</strong><br/>
+          • Open Settings above and lower the min score to <strong>30–40</strong><br/>
+          • Extend the date range (start earlier)<br/>
+          • Try a more volatile pair like <strong>BTC-USD</strong> or a higher timeframe like <strong>4h</strong></p>
+        </div>""",unsafe_allow_html=True)
+        return
 
-            peak=np.maximum.accumulate(arr); dd=(arr-peak)/peak*100
-            ddf=go.Figure(go.Scatter(y=dd,mode="lines",line=dict(color="#e05a5a",width=1.5),
-                                     fill="tozeroy",fillcolor="rgba(224,90,90,0.08)"))
-            ddf.update_layout(template="plotly_dark",paper_bgcolor="#0e1117",plot_bgcolor="#0e1117",
-                              height=200,margin=dict(l=0,r=0,t=10,b=0),
-                              title=dict(text="Drawdown",font=dict(color="#e05a5a",size=12)),
-                              yaxis=dict(ticksuffix="%",showgrid=True,gridcolor="#1a1d2e",side="right"),
-                              xaxis=dict(showgrid=True,gridcolor="#1a1d2e"))
-            st.plotly_chart(ddf,use_container_width=True)
+    # ── Strategy Health card ──────────────────────────────────────────────────
+    h_emoji,h_color,h_rating,h_desc=_strategy_health(report)
+    scale=cfg.account.balance/report.initial_capital
+    user_final=report.final_capital*scale
+    user_profit=user_final-cfg.account.balance
+    st.markdown(f"""
+    <div style="background:{h_color}12;border:1px solid {h_color}44;border-left:5px solid {h_color};
+         border-radius:12px;padding:20px 24px;margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <div>
+          <span style="font-size:1.8em">{h_emoji}</span>
+          <span style="color:{h_color};font-size:1.3em;font-weight:700;margin-left:10px">{h_rating} Strategy</span>
+          <div style="color:#8890a8;margin-top:6px">{h_desc}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="color:#8890a8;font-size:.8em">Starting with your ${cfg.account.balance:,.0f}</div>
+          <div style="font-size:1.6em;font-weight:700;color:{'#2ecc8a' if user_profit>=0 else '#e05a5a'}">${user_final:,.2f}</div>
+          <div style="color:{'#2ecc8a' if user_profit>=0 else '#e05a5a'};font-size:.9em">
+            {'+' if user_profit>=0 else ''}{user_profit:,.2f} ({report.total_return_pct:+.1f}%)</div>
+        </div>
+      </div>
+    </div>""",unsafe_allow_html=True)
 
-        with st.expander("Full Report"): st.code(report.summary())
+    # ── Metrics ───────────────────────────────────────────────────────────────
+    m1,m2,m3,m4,m5,m6=st.columns(6)
+    m1.metric("Total Trades",report.total_trades)
+    m2.metric("Win Rate",f"{report.win_rate:.1f}%",delta=f"{report.win_rate-50:+.1f}% vs 50%")
+    pf_val=report.profit_factor if report.profit_factor!=float("inf") else 999
+    m3.metric("Profit Factor",f"{pf_val:.2f}" if pf_val<999 else "∞")
+    m4.metric("Sharpe Ratio",f"{report.sharpe_ratio:.2f}")
+    m5.metric("Max Drawdown",f"{report.max_drawdown_pct:.1f}%")
+    m6.metric("Return",f"{report.total_return_pct:+.1f}%")
+    st.divider()
 
+    # ── Plain-English explanation ─────────────────────────────────────────────
+    with st.expander("📖 What do these numbers mean?",expanded=True):
+        wr=report.win_rate; dd=report.max_drawdown_pct; ret=report.total_return_pct
+        wr_txt="excellent" if wr>=60 else "good" if wr>=50 else "below average"
+        pf_txt="strong" if pf_val>=2 else "positive" if pf_val>=1 else "losing"
+        dd_txt="very low" if dd<=10 else "moderate" if dd<=20 else "high"
+        st.markdown(
+            f"Over **{report.start_date} → {report.end_date}** this strategy executed **{report.total_trades} trades** "
+            f"on **{bt_sym} [{bt_tf}]**.\n\n"
+            f"- **{report.wins} wins** and **{report.losses} losses** — a **{wr:.1f}%** win rate, which is {wr_txt}. "
+            f"*(Even a 45% win rate can be profitable if your wins are bigger than your losses.)*\n"
+            f"- **Profit factor {pf_val:.2f}** — for every $1 lost, you made ${pf_val:.2f}. "
+            f"Above 1.0 = profitable; above 1.5 = {pf_txt}.\n"
+            f"- **Max drawdown {dd:.1f}%** — the worst peak-to-trough loss. "
+            f"That's ${cfg.account.balance*dd/100:.0f} on your ${cfg.account.balance:,.0f} account. "
+            f"{dd_txt.title()} risk.\n"
+            f"- **Total return {ret:+.1f}%** — your ${cfg.account.balance:,.0f} would have become **${user_final:,.0f}** over this period."
+        )
+
+    # ── Equity curve with trade markers ──────────────────────────────────────
+    if report.equity_curve:
+        arr=np.array(report.equity_curve)*scale
+        idx=list(range(len(arr)))
+        ef=go.Figure()
+        ef.add_trace(go.Scatter(x=idx,y=arr,mode="lines",
+                                line=dict(color="#c9a84c",width=2.5),
+                                fill="tozeroy",fillcolor="rgba(201,168,76,0.07)",
+                                name="Account Balance"))
+        ef.add_hline(y=cfg.account.balance,line_dash="dot",line_color="#3b3f5c",
+                     annotation_text=f"Start ${cfg.account.balance:,.0f}",
+                     annotation_font_color="#8890a8")
         if report.trades:
-            st.dataframe(pd.DataFrame([{"Entry":t.entry_time,"Exit":t.exit_time,"Dir":t.direction,
-                                         "Entry $":round(t.entry_price,5),"Exit $":round(t.exit_price,5),
-                                         "P&L%":round(t.pnl_pct,2),"Outcome":t.outcome,"Score":t.score}
-                                        for t in report.trades]),use_container_width=True,height=350)
+            win_x=[i+1 for i,t in enumerate(report.trades) if t.outcome=="WIN" and i+1<len(arr)]
+            win_y=[arr[i] for i in win_x]
+            loss_x=[i+1 for i,t in enumerate(report.trades) if t.outcome=="LOSS" and i+1<len(arr)]
+            loss_y=[arr[i] for i in loss_x]
+            ef.add_trace(go.Scatter(x=win_x,y=win_y,mode="markers",
+                                    marker=dict(symbol="triangle-up",size=10,color="#2ecc8a"),name="Win"))
+            ef.add_trace(go.Scatter(x=loss_x,y=loss_y,mode="markers",
+                                    marker=dict(symbol="triangle-down",size=10,color="#e05a5a"),name="Loss"))
+        ef.update_layout(template="plotly_dark",paper_bgcolor="#0e1117",plot_bgcolor="#0e1117",
+                         height=360,margin=dict(l=0,r=0,t=10,b=0),
+                         title=dict(text=f"Account Balance per Trade — {bt_sym} [{bt_tf}]",font=dict(color="#c9a84c")),
+                         xaxis=dict(title="Trade #",showgrid=True,gridcolor="#1a1d2e"),
+                         yaxis=dict(title="Balance ($)",showgrid=True,gridcolor="#1a1d2e",side="right",tickprefix="$"),
+                         legend=dict(orientation="h",font=dict(color="#8890a8"),bgcolor="rgba(0,0,0,0)"))
+        st.plotly_chart(ef,use_container_width=True)
+
+        peak=np.maximum.accumulate(arr); dd_arr=(arr-peak)/peak*100
+        ddf=go.Figure(go.Scatter(x=idx,y=dd_arr,mode="lines",
+                                  line=dict(color="#e05a5a",width=1.5),
+                                  fill="tozeroy",fillcolor="rgba(224,90,90,0.08)"))
+        ddf.update_layout(template="plotly_dark",paper_bgcolor="#0e1117",plot_bgcolor="#0e1117",
+                           height=180,margin=dict(l=0,r=0,t=10,b=0),
+                           title=dict(text="Drawdown from peak",font=dict(color="#e05a5a",size=12)),
+                           yaxis=dict(ticksuffix="%",showgrid=True,gridcolor="#1a1d2e",side="right"),
+                           xaxis=dict(title="Trade #",showgrid=True,gridcolor="#1a1d2e"))
+        st.plotly_chart(ddf,use_container_width=True)
+
+    # ── Win/Loss breakdown ────────────────────────────────────────────────────
+    if report.trades:
+        ca,cb=st.columns(2)
+        with ca:
+            wlf=go.Figure(go.Bar(x=["Wins","Losses","Breakeven"],
+                                  y=[report.wins,report.losses,report.breakevens],
+                                  marker_color=["#2ecc8a","#e05a5a","#8890a8"],
+                                  text=[report.wins,report.losses,report.breakevens],
+                                  textposition="outside"))
+            wlf.update_layout(template="plotly_dark",paper_bgcolor="#0e1117",plot_bgcolor="#0e1117",
+                               height=220,margin=dict(l=0,r=0,t=30,b=0),
+                               title=dict(text="Win / Loss Split",font=dict(color="#c9a84c")),
+                               yaxis=dict(showgrid=True,gridcolor="#1a1d2e"),xaxis=dict(showgrid=False))
+            st.plotly_chart(wlf,use_container_width=True)
+        with cb:
+            pnl_vals=[t.pnl_pct for t in report.trades]
+            colors=["#2ecc8a" if v>=0 else "#e05a5a" for v in pnl_vals]
+            pnlf=go.Figure(go.Bar(x=list(range(1,len(pnl_vals)+1)),y=pnl_vals,
+                                   marker_color=colors,name="P&L %"))
+            pnlf.add_hline(y=0,line_color="#3b3f5c",line_width=1)
+            pnlf.update_layout(template="plotly_dark",paper_bgcolor="#0e1117",plot_bgcolor="#0e1117",
+                                height=220,margin=dict(l=0,r=0,t=30,b=0),
+                                title=dict(text="P&L per Trade (%)",font=dict(color="#c9a84c")),
+                                xaxis=dict(title="Trade #",showgrid=True,gridcolor="#1a1d2e"),
+                                yaxis=dict(ticksuffix="%",showgrid=True,gridcolor="#1a1d2e",side="right"))
+            st.plotly_chart(pnlf,use_container_width=True)
+
+        with st.expander("📋 All Trades",expanded=False):
+            rows=[{"#":i+1,
+                   "Date":t.entry_time.strftime("%Y-%m-%d") if hasattr(t.entry_time,"strftime") else str(t.entry_time)[:10],
+                   "Dir":t.direction,
+                   "Entry":round(t.entry_price,5),"Exit":round(t.exit_price,5),
+                   "P&L%":round(t.pnl_pct,2),
+                   "P&L $":round(t.pnl*(cfg.account.balance/report.initial_capital),2),
+                   "Result":t.outcome,"Score":t.score}
+                  for i,t in enumerate(report.trades)]
+            df_t=pd.DataFrame(rows)
+            def _co(v): return "color:#2ecc8a" if v=="WIN" else "color:#e05a5a" if v=="LOSS" else ""
+            def _cp(v): return f"color:{'#2ecc8a' if v>=0 else '#e05a5a'}"
+            st.dataframe(df_t.style.applymap(_co,subset=["Result"]).applymap(_cp,subset=["P&L%","P&L $"]),
+                         use_container_width=True,hide_index=True,height=400)
 
 # ── Page: Settings ────────────────────────────────────────────────────────────
 
@@ -963,7 +1298,7 @@ with st.sidebar:
                 unsafe_allow_html=True)
     st.divider()
     page=st.radio("Navigate",
-                  ["Live Feed","Charts","Heatmap","Signals","Journal","Planner","Backtest","Settings"],
+                  ["Live Feed","Trade Analyzer","Heatmap","Signals","Journal","Risk Calculator","Strategy Lab","Settings"],
                   index=0)
     st.divider()
     state=circuit_breaker.state
@@ -984,10 +1319,10 @@ with st.sidebar:
 # ── Route ─────────────────────────────────────────────────────────────────────
 
 if page=="Live Feed": _page_live_feed()
-elif page=="Charts": _page_charts()
+elif page=="Trade Analyzer": _page_charts()
 elif page=="Heatmap": _page_heatmap()
 elif page=="Signals": _page_signals()
 elif page=="Journal": _page_journal()
-elif page=="Planner": _page_planner()
-elif page=="Backtest": _page_backtest()
+elif page=="Risk Calculator": _page_planner()
+elif page=="Strategy Lab": _page_backtest()
 elif page=="Settings": _page_settings()
