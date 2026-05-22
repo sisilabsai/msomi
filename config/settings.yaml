@@ -1,0 +1,117 @@
+# Application
+app:
+  name: Msomi
+  version: "0.1.0"
+  log_level: INFO
+  env: development
+
+# Account
+account:
+  balance: 1000.0
+  currency: USD
+
+# Risk Management
+risk:
+  per_trade_pct: 0.02          # 2% of balance per trade
+  daily_loss_limit_pct: 0.10   # 10% daily max loss
+  weekly_drawdown_limit_pct: 0.20
+  max_consecutive_losses: 3
+  min_risk_reward: 1.5
+  max_open_positions: 5
+  correlation_limit: 0.7       # Block new trade if corr > 70% with open position
+
+# Signal Engine
+signals:
+  min_confidence_score: 65     # 1–100; only fire if score >= this
+  lookback_periods: 200
+  timeframes:
+    primary: "1h"
+    confirmation: ["15m", "4h"]
+  indicators:
+    ema_fast: 20
+    ema_slow: 50
+    ema_trend: 200
+    rsi_period: 14
+    rsi_overbought: 70
+    rsi_oversold: 30
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    bb_period: 20
+    bb_std: 2.0
+    atr_period: 14
+    vwap_session: "D"
+  weights:
+    trend_alignment: 25        # % weight in confluence score
+    rsi_signal: 20
+    macd_signal: 20
+    bb_signal: 15
+    vwap_signal: 10
+    volume_confirm: 10
+
+# Assets Watchlist
+watchlist:
+  forex:
+    - EURUSD=X
+    - GBPUSD=X
+    - USDJPY=X
+    - AUDUSD=X
+    - USDCAD=X
+    - NZDUSD=X
+  crypto:
+    - BTC-USD
+    - ETH-USD
+    - SOL-USD
+    - BNB-USD
+
+# Sessions (UTC)
+sessions:
+  london:
+    start: "08:00"
+    end: "17:00"
+    weight: 1.2
+  new_york:
+    start: "13:00"
+    end: "22:00"
+    weight: 1.2
+  asian:
+    start: "23:00"
+    end: "08:00"
+    weight: 0.8
+  avoid_news_window_minutes: 30
+
+# AI
+ai:
+  provider: anthropic          # anthropic | openai
+  model_anthropic: "claude-3-5-sonnet-20241022"
+  model_openai: "gpt-4o"
+  max_tokens: 800
+  temperature: 0.3
+  narrate_signals: true
+  weekly_review: true
+  post_trade_review: true
+
+# Backtesting
+backtest:
+  default_start: "2022-01-01"
+  default_end: "2024-12-31"
+  initial_capital: 10000
+  commission_pct: 0.001        # 0.1% per trade
+  slippage_pct: 0.0005         # 0.05%
+  monte_carlo_runs: 300
+
+# Alerts
+alerts:
+  telegram_enabled: true
+  email_enabled: false
+  quiet_hours:
+    start: "23:00"
+    end: "06:00"
+  eod_report_time: "22:00"
+
+# Data
+data:
+  forex_source: yfinance        # yfinance | twelvedata
+  crypto_source: yfinance       # yfinance | binance
+  cache_dir: "./data/cache"
+  db_url: "sqlite:///./data/msomi.db"

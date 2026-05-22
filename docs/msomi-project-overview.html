@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Msomi — Project Overview</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=JetBrains+Mono:wght@300;400;600&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --black: #0a0a0a;
+    --deep: #0f1117;
+    --surface: #161820;
+    --card: #1c1f2e;
+    --border: #252840;
+    --gold: #c9a84c;
+    --gold-light: #e8c97a;
+    --gold-dim: rgba(201, 168, 76, 0.15);
+    --green: #2ecc8a;
+    --green-dim: rgba(46, 204, 138, 0.12);
+    --red: #e05a5a;
+    --blue: #4a8fe8;
+    --blue-dim: rgba(74, 143, 232, 0.12);
+    --text: #e8e8f0;
+    --muted: #8890a8;
+    --faint: #454860;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--black);
+    color: var(--text);
+    font-family: 'Outfit', sans-serif;
+    font-weight: 300;
+    line-height: 1.7;
+    overflow-x: hidden;
+  }
+
+  /* HERO */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    position: relative;
+    padding: 60px 24px;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(201,168,76,0.08) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 40% at 80% 80%, rgba(74,143,232,0.06) 0%, transparent 60%),
+      var(--black);
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(201,168,76,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(201,168,76,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+  }
+
+  .hero-eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 32px;
+    opacity: 0;
+    animation: fadeUp 0.8s ease 0.2s forwards;
+  }
+
+  .hero-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(72px, 14vw, 140px);
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    line-height: 0.9;
+    background: linear-gradient(135deg, var(--gold-light) 0%, var(--gold) 50%, #a07828 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    opacity: 0;
+    animation: fadeUp 0.8s ease 0.4s forwards;
+    margin-bottom: 8px;
+  }
+
+  .hero-sub {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(14px, 2vw, 20px);
+    font-style: italic;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    opacity: 0;
+    animation: fadeUp 0.8s ease 0.6s forwards;
+    margin-bottom: 48px;
+  }
+
+  .hero-tagline {
+    font-size: 16px;
+    color: var(--text);
+    max-width: 560px;
+    opacity: 0;
+    animation: fadeUp 0.8s ease 0.8s forwards;
+    margin-bottom: 56px;
+    font-weight: 400;
+  }
+
+  .hero-pills {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    opacity: 0;
+    animation: fadeUp 0.8s ease 1s forwards;
+  }
+
+  .pill {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 6px 16px;
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+  }
+
+  .pill.gold { border-color: var(--gold); color: var(--gold); }
+  .pill.green { border-color: var(--green); color: var(--green); }
+  .pill.blue { border-color: var(--blue); color: var(--blue); }
+
+  /* SECTION */
+  .section {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 80px 24px;
+  }
+
+  .section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.35em;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(28px, 4vw, 44px);
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 16px;
+  }
+
+  .section-desc {
+    color: var(--muted);
+    font-size: 16px;
+    max-width: 640px;
+    margin-bottom: 56px;
+  }
+
+  /* DIVIDER */
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+    margin: 0 24px;
+  }
+
+  /* ARCHITECTURE */
+  .arch-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .arch-card {
+    background: var(--card);
+    padding: 36px 32px;
+    position: relative;
+    transition: background 0.3s;
+  }
+
+  .arch-card:hover { background: #20243a; }
+
+  .arch-number {
+    font-family: 'Playfair Display', serif;
+    font-size: 48px;
+    font-weight: 900;
+    color: var(--border);
+    line-height: 1;
+    margin-bottom: 16px;
+    transition: color 0.3s;
+  }
+
+  .arch-card:hover .arch-number { color: var(--faint); }
+
+  .arch-icon {
+    font-size: 28px;
+    margin-bottom: 12px;
+  }
+
+  .arch-name {
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .arch-tagline {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--gold);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .arch-desc {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.7;
+    margin-bottom: 20px;
+  }
+
+  .arch-features {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .arch-features li {
+    font-size: 13px;
+    color: var(--text);
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .arch-features li::before {
+    content: '→';
+    color: var(--gold);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+
+  /* MODULE CARDS */
+  .modules-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+  }
+
+  .module-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s, transform 0.3s;
+  }
+
+  .module-card:hover {
+    border-color: var(--gold);
+    transform: translateY(-3px);
+  }
+
+  .module-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--gold), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .module-card:hover::before { opacity: 1; }
+
+  .module-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    padding: 4px 10px;
+    border-radius: 100px;
+    display: inline-block;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+  }
+
+  .tag-ai { background: var(--gold-dim); color: var(--gold); }
+  .tag-signal { background: var(--green-dim); color: var(--green); }
+  .tag-risk { background: rgba(224,90,90,0.12); color: var(--red); }
+  .tag-data { background: var(--blue-dim); color: var(--blue); }
+  .tag-ux { background: rgba(138,90,224,0.12); color: #a87fe8; }
+  .tag-infra { background: rgba(90,224,200,0.12); color: #5ae0c8; }
+
+  .module-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+
+  .module-desc {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.7;
+    margin-bottom: 20px;
+  }
+
+  .feature-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .feature-list li {
+    font-size: 12px;
+    color: var(--text);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .feature-list li::before {
+    content: '◆';
+    color: var(--faint);
+    font-size: 7px;
+    margin-top: 4px;
+    flex-shrink: 0;
+  }
+
+  /* AI ENGINE HIGHLIGHT */
+  .ai-highlight {
+    background: linear-gradient(135deg, #141625, #1a1d30);
+    border: 1px solid var(--gold);
+    border-radius: 20px;
+    padding: 52px 48px;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+
+  .ai-highlight::after {
+    content: 'AI';
+    position: absolute;
+    right: -20px;
+    top: -20px;
+    font-family: 'Playfair Display', serif;
+    font-size: 200px;
+    font-weight: 900;
+    color: rgba(201,168,76,0.04);
+    line-height: 1;
+    pointer-events: none;
+  }
+
+  .ai-highlight h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 28px;
+    color: var(--gold-light);
+    margin-bottom: 12px;
+  }
+
+  .ai-highlight p {
+    color: var(--muted);
+    font-size: 15px;
+    max-width: 600px;
+    margin-bottom: 32px;
+  }
+
+  .ai-capabilities {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+  }
+
+  .ai-cap {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+
+  .ai-cap-icon { font-size: 22px; margin-bottom: 8px; }
+  .ai-cap-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .ai-cap-desc { font-size: 12px; color: var(--muted); }
+
+  /* ROADMAP */
+  .roadmap {
+    position: relative;
+    padding-left: 40px;
+  }
+
+  .roadmap::before {
+    content: '';
+    position: absolute;
+    left: 12px;
+    top: 8px;
+    bottom: 8px;
+    width: 1px;
+    background: linear-gradient(180deg, var(--gold), var(--border), transparent);
+  }
+
+  .phase {
+    position: relative;
+    margin-bottom: 48px;
+  }
+
+  .phase::before {
+    content: '';
+    position: absolute;
+    left: -35px;
+    top: 6px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--gold);
+    box-shadow: 0 0 12px rgba(201,168,76,0.5);
+  }
+
+  .phase-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 12px;
+  }
+
+  .phase-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--gold);
+    background: var(--gold-dim);
+    padding: 4px 12px;
+    border-radius: 100px;
+  }
+
+  .phase-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  .phase-duration {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-left: auto;
+  }
+
+  .phase-items {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+  }
+
+  .phase-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  /* STACK TABLE */
+  .stack-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+  }
+
+  .stack-row {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .stack-cat {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    min-width: 90px;
+  }
+
+  .stack-val {
+    font-size: 14px;
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  /* PRINCIPLES */
+  .principles-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+  }
+
+  .principle {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 24px;
+    text-align: center;
+    transition: border-color 0.3s;
+  }
+
+  .principle:hover { border-color: var(--gold); }
+
+  .principle-icon { font-size: 32px; margin-bottom: 12px; }
+  .principle-title { font-family: 'Playfair Display', serif; font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+  .principle-desc { font-size: 13px; color: var(--muted); }
+
+  /* FOOTER */
+  .footer {
+    text-align: center;
+    padding: 60px 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  .footer-logo {
+    font-family: 'Playfair Display', serif;
+    font-size: 36px;
+    font-weight: 900;
+    background: linear-gradient(135deg, var(--gold-light), var(--gold));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+  }
+
+  .footer-tagline {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.25em;
+    color: var(--faint);
+  }
+
+  /* ANIMATIONS */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .fade-in {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+
+  .fade-in.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* MONO TEXT */
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* HIGHLIGHT SPAN */
+  .hl { color: var(--gold-light); }
+  .hl-green { color: var(--green); }
+
+  /* WARNING BOX */
+  .warning-box {
+    background: rgba(224,90,90,0.08);
+    border: 1px solid rgba(224,90,90,0.3);
+    border-radius: 10px;
+    padding: 20px 24px;
+    font-size: 13px;
+    color: #d08080;
+    margin-top: 48px;
+  }
+
+  .warning-box strong { color: var(--red); }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-eyebrow">Project Overview · Personal Trading Intelligence System</div>
+  <h1 class="hero-title">Msomi</h1>
+  <p class="hero-sub">msomi — the educated one (Swahili)</p>
+  <p class="hero-tagline">A personal AI-powered trading intelligence framework for Forex and Crypto — built to give one trader an unfair, systematic edge.</p>
+  <div class="hero-pills">
+    <span class="pill gold">AI-Powered Analysis</span>
+    <span class="pill green">Signal Detection</span>
+    <span class="pill blue">Risk Management</span>
+    <span class="pill">Backtesting Engine</span>
+    <span class="pill">Forex + Crypto</span>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- WHAT IS MSOMI -->
+<section class="section fade-in">
+  <div class="section-label">001 — The Vision</div>
+  <h2 class="section-title">What Msomi Is</h2>
+  <p class="section-desc">Most retail traders lose not because markets are unbeatable — but because they trade on emotion, inconsistency, and incomplete information. Msomi eliminates all three.</p>
+
+  <div class="principles-grid">
+    <div class="principle">
+      <div class="principle-icon">🧠</div>
+      <div class="principle-title">AI as Analyst</div>
+      <div class="principle-desc">Claude or GPT-4 reads market context and explains signals in plain language — not just arrows, but reasoning.</div>
+    </div>
+    <div class="principle">
+      <div class="principle-icon">📡</div>
+      <div class="principle-title">Signal as Science</div>
+      <div class="principle-desc">Technical indicators combined into a scored signal engine. Only high-confidence setups surface.</div>
+    </div>
+    <div class="principle">
+      <div class="principle-icon">🛡️</div>
+      <div class="principle-title">Risk as Religion</div>
+      <div class="principle-desc">Hard limits on every trade. Daily circuit breakers. Position sizing calculated automatically.</div>
+    </div>
+    <div class="principle">
+      <div class="principle-icon">📚</div>
+      <div class="principle-title">History as Teacher</div>
+      <div class="principle-desc">Every strategy backtested across years of data before a single live dollar is risked.</div>
+    </div>
+    <div class="principle">
+      <div class="principle-icon">🔬</div>
+      <div class="principle-title">Data as Truth</div>
+      <div class="principle-desc">All decisions logged. Performance tracked. The numbers tell you what's working — not gut feel.</div>
+    </div>
+    <div class="principle">
+      <div class="principle-icon">⚡</div>
+      <div class="principle-title">Speed as Edge</div>
+      <div class="principle-desc">Real-time alerts via Telegram. No watching screens. Msomi watches the market — you act.</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ARCHITECTURE -->
+<section class="section fade-in">
+  <div class="section-label">002 — System Architecture</div>
+  <h2 class="section-title">Three Core Layers</h2>
+  <p class="section-desc">Msomi is built in three layers, each serving a distinct function. Together they create a complete intelligence loop.</p>
+
+  <div class="arch-grid">
+    <div class="arch-card">
+      <div class="arch-number">01</div>
+      <div class="arch-icon">🔍</div>
+      <div class="arch-name">Intelligence Layer</div>
+      <div class="arch-tagline">AI Brain · Context Engine</div>
+      <div class="arch-desc">The reasoning engine. Combines market data, news sentiment, and technical context to produce human-readable analysis — not just signals, but why.</div>
+      <ul class="arch-features">
+        <li>Claude/GPT-4 market commentary per signal</li>
+        <li>Sentiment analysis from financial news feeds</li>
+        <li>Regime detection (trending vs ranging)</li>
+        <li>Confidence scoring with plain-language rationale</li>
+        <li>Multi-timeframe confluence analysis</li>
+      </ul>
+    </div>
+    <div class="arch-card">
+      <div class="arch-number">02</div>
+      <div class="arch-icon">📡</div>
+      <div class="arch-name">Signal Layer</div>
+      <div class="arch-tagline">Detection Engine · Rules Core</div>
+      <div class="arch-desc">The technical engine. Runs indicator combinations across multiple timeframes, scores setups 1–100, and only surfaces high-conviction opportunities.</div>
+      <ul class="arch-features">
+        <li>EMA, RSI, MACD, Bollinger Bands, ATR, VWAP</li>
+        <li>Multi-indicator confluence scoring</li>
+        <li>Pattern recognition (H&S, double tops, flags)</li>
+        <li>Timeframe alignment checks (M5 + M15 + H1)</li>
+        <li>Volume confirmation filters</li>
+      </ul>
+    </div>
+    <div class="arch-card">
+      <div class="arch-number">03</div>
+      <div class="arch-icon">🛡️</div>
+      <div class="arch-name">Risk Layer</div>
+      <div class="arch-tagline">Capital Protector · Discipline Engine</div>
+      <div class="arch-desc">The discipline engine. Hard-coded rules that protect your capital regardless of conviction level. No overrides allowed in live mode.</div>
+      <ul class="arch-features">
+        <li>Per-trade max risk % (default: 2% of balance)</li>
+        <li>Daily max loss circuit breaker (default: 10%)</li>
+        <li>Consecutive loss streak detection & pause</li>
+        <li>Session quality filters (avoid low liquidity)</li>
+        <li>Correlation exposure limits across positions</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ALL MODULES -->
+<section class="section fade-in">
+  <div class="section-label">003 — Full Feature Set</div>
+  <h2 class="section-title">Every Module, Fully Scoped</h2>
+  <p class="section-desc">The complete feature universe. Not MVP — everything Msomi can become.</p>
+
+  <!-- AI ENGINE -->
+  <div class="ai-highlight" style="margin-bottom:40px;">
+    <h3>🤖 Msomi AI Engine</h3>
+    <p>The heart of the system. A large language model (Claude or GPT-4) that acts as your personal market analyst — reading data, forming a view, and explaining it to you before every trade.</p>
+    <div class="ai-capabilities">
+      <div class="ai-cap">
+        <div class="ai-cap-icon">💬</div>
+        <div class="ai-cap-title">Signal Narration</div>
+        <div class="ai-cap-desc">Every signal comes with a plain-language explanation: why this setup, why now, what to watch.</div>
+      </div>
+      <div class="ai-cap">
+        <div class="ai-cap-icon">🌍</div>
+        <div class="ai-cap-title">News Synthesis</div>
+        <div class="ai-cap-desc">Pulls in economic calendar events, Fed news, crypto on-chain data, and synthesizes impact.</div>
+      </div>
+      <div class="ai-cap">
+        <div class="ai-cap-icon">📊</div>
+        <div class="ai-cap-title">Regime Awareness</div>
+        <div class="ai-cap-desc">Detects whether market is trending, ranging, or volatile and adjusts strategy recommendations accordingly.</div>
+      </div>
+      <div class="ai-cap">
+        <div class="ai-cap-icon">🪞</div>
+        <div class="ai-cap-title">Trade Review</div>
+        <div class="ai-cap-desc">After each trade, AI reviews what happened vs prediction and logs learnings to improve future analysis.</div>
+      </div>
+      <div class="ai-cap">
+        <div class="ai-cap-icon">⚠️</div>
+        <div class="ai-cap-title">Risk Commentary</div>
+        <div class="ai-cap-desc">Flags sessions, news events, or market conditions where signal reliability is expected to be lower.</div>
+      </div>
+      <div class="ai-cap">
+        <div class="ai-cap-icon">📈</div>
+        <div class="ai-cap-title">Strategy Coach</div>
+        <div class="ai-cap-desc">Weekly AI review of your trading history — pattern recognition on your own behavior and decisions.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modules-grid">
+
+    <div class="module-card">
+      <span class="module-tag tag-signal">Signal Module</span>
+      <div class="module-title">Signal Detection Engine</div>
+      <div class="module-desc">The core technical brain. Watches multiple assets simultaneously and fires alerts only on high-confidence confluences.</div>
+      <ul class="feature-list">
+        <li>200 EMA trend filter</li>
+        <li>RSI divergence detection</li>
+        <li>MACD histogram momentum</li>
+        <li>Bollinger Band squeeze & breakout</li>
+        <li>VWAP deviation signals</li>
+        <li>ATR-based volatility filtering</li>
+        <li>Confluence scoring (1–100)</li>
+        <li>Configurable minimum score threshold</li>
+        <li>Multi-timeframe confirmation</li>
+        <li>Candlestick pattern recognition</li>
+        <li>Support & resistance zone detection</li>
+        <li>Chart pattern detection (H&S, flags, triangles)</li>
+      </ul>
+    </div>
+
+    <div class="module-card">
+      <span class="module-tag tag-data">Data Module</span>
+      <div class="module-title">Market Data Pipeline</div>
+      <div class="module-desc">Ingests, normalizes, and stores real-time and historical price data across forex pairs and crypto assets.</div>
+      <ul class="feature-list">
+        <li>WebSocket real-time price feeds</li>
+        <li>Multi-source aggregation (Yahoo Finance, Twelve Data, Binance API)</li>
+        <li>OHLCV data normalization</li>
+        <li>Historical data warehouse (SQLite/PostgreSQL)</li>
+        <li>Economic calendar feed (high-impact events)</li>
+        <li>Crypto on-chain data integration</li>
+        <li>Funding rates & open interest (crypto)</li>
+        <li>News feed ingestion (RSS + scraping)</li>
+        <li>Data gap detection & auto-healing</li>
+        <li>Asset watchlist management</li>
+      </ul>
+    </div>
+
+    <div class="module-card">
+      <span class="module-tag tag-risk">Risk Module</span>
+      <div class="module-title">Risk & Position Manager</div>
+      <div class="module-desc">Automated capital protection system. Calculates position sizes and enforces hard limits before any trade fires.</div>
+      <ul class="feature-list">
+        <li>Dynamic position sizing (% of balance)</li>
+        <li>Per-trade max loss cap</li>
+        <li>Daily loss limit & auto-pause</li>
+        <li>Weekly drawdown monitoring</li>
+        <li>Win/loss streak detection</li>
+        <li>Consecutive loss pause (e.g. 3 losses = stop)</li>
+        <li>Session quality scoring</li>
+        <li>Correlation risk across open positions</li>
+        <li>Martingale strategy detection & block</li>
+        <li>Risk-reward ratio enforcement (min 1.5:1)</li>
+      </ul>
+    </div>
+
+    <div class="module-card">
+      <span class="module-tag tag-data">Backtest Module</span>
+      <div class="module-title">Strategy Backtesting Engine</div>
+      <div class="module-desc">Validate any strategy across years of historical data before a single live cent is committed.</div>
+      <ul class="feature-list">
+        <li>Full OHLCV backtesting via vectorbt</li>
+        <li>Walk-forward analysis</li>
+        <li>Monte Carlo simulation (300+ scenarios)</li>
+        <li>Win rate, Sharpe ratio, max drawdown metrics</li>
+        <li>Slippage & spread modeling</li>
+        <li>Multi-asset concurrent backtesting</li>
+        <li>Strategy parameter optimization</li>
+        <li>Overfitting detection</li>
+        <li>Comparison across strategies</li>
+        <li>Export results to PDF/CSV</li>
+      </ul>
+    </div>
+
+    <div class="module-card">
+      <span class="module-tag tag-ux">Alerts Module</span>
+      <div class="module-title">Notification & Alert System</div>
+      <div class="module-desc">Msomi watches the market 24/7. You get a ping only when something is worth acting on.</div>
+      <ul class="feature-list">
+        <li>Telegram bot with rich signal messages</li>
+        <li>Signal card: asset, direction, score, expiry</li>
+        <li>AI reasoning attached to every alert</li>
+        <li>Risk parameters included in notification</li>
+        <li>News event warnings before high-impact releases</li>
+        <li>Daily performance summary (EOD report)</li>
+        <li>Circuit breaker alerts (daily loss hit)</li>
+        <li>Watchlist price level alerts</li>
+        <li>Quiet hours / DND scheduling</li>
+        <li>Email digest (optional)</li>
+      </ul>
+    </div>
+
+    <div class="module-card">
+      <span class="module-tag tag-ux">Dashboard Module</span>
+      <div class="module-title">Msomi Control Center</div>
+      <div class="module-desc">A Streamlit dashboard giving you a live, visual command center for all signals, performance, and settings.</div>
+      <ul class="feature-list">
+        <li>Live signal feed with confidence scores</li>
+        <li>Asset watchlist with real-time prices</li>
+        <li>AI analysis panel per signal</li>
+        <li>Open trade tracker</li>
+        <li>Balance & P&L curve</li>
+        <li>Session performance heatmap</li>
+        <li>Indicator overlays on price charts</li>
+        <li>Backtest results visualizer</li>
+        <li>Risk settings control panel</li>
+        <li>Trade journal browser</li>
+      </ul>
+    </div>
+
+    <div class="module-card">
+      <span class="module-tag tag-ai">Journal Module</span>
+      <div class="module-title">Intelligent Trade Journal</div>
+      <div class="module-desc">Every trade automatically logged. AI reviews your history for patterns in your decision-making.</div>
+      <ul class="feature-list">
+        <li>Auto-log all signals fired</li>
+        <li>Manual trade outcome entry</li>
+        <li>Emotion/confidence tagging per trade</li>
+        <li>Win rate by asset, session, time of day</li>
+        <li>Strategy performance breakdown</li>
+        <li>AI weekly behavioral analysis</li>
+        <li>Streak analytics (hot/cold streaks)</li>
+        <li>Best/worst performing setups</li>
+        <li>Export to CSV/PDF</li>
+        <li>Monthly performance report</li>
+      </ul>
+    </div>
+
+    <div class="module-card">
+      <span class="module-tag tag-infra">Config Module</span>
+      <div class="module-title">Strategy & Config Engine</div>
+      <div class="module-desc">Full control over every parameter. Swap strategies, adjust thresholds, and create custom rule sets without touching code.</div>
+      <ul class="feature-list">
+        <li>YAML-based strategy configuration</li>
+        <li>Signal weight customization per indicator</li>
+        <li>Asset-specific settings</li>
+        <li>Timeframe presets</li>
+        <li>Risk profile presets (conservative/aggressive)</li>
+        <li>Session schedules (London, NY, Asian)</li>
+        <li>AI model selection (Claude vs GPT-4)</li>
+        <li>Alert channel configuration</li>
+        <li>Confidence threshold tuning</li>
+        <li>Strategy versioning & rollback</li>
+      </ul>
+    </div>
+
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- TECH STACK -->
+<section class="section fade-in">
+  <div class="section-label">004 — Tech Stack</div>
+  <h2 class="section-title">What You'll Build With</h2>
+  <p class="section-desc">Chosen for speed of development, Python-native, and free/low-cost infrastructure.</p>
+
+  <div class="stack-grid">
+    <div class="stack-row"><span class="stack-cat">Language</span><span class="stack-val">Python 3.11+</span></div>
+    <div class="stack-row"><span class="stack-cat">Indicators</span><span class="stack-val">pandas-ta / ta-lib</span></div>
+    <div class="stack-row"><span class="stack-cat">Backtesting</span><span class="stack-val">vectorbt</span></div>
+    <div class="stack-row"><span class="stack-cat">AI Brain</span><span class="stack-val">Anthropic Claude API / OpenAI</span></div>
+    <div class="stack-row"><span class="stack-cat">Data — Forex</span><span class="stack-val">Twelve Data / Yahoo Finance</span></div>
+    <div class="stack-row"><span class="stack-cat">Data — Crypto</span><span class="stack-val">Binance API / CryptoCompare</span></div>
+    <div class="stack-row"><span class="stack-cat">Real-time</span><span class="stack-val">WebSockets (websockets lib)</span></div>
+    <div class="stack-row"><span class="stack-cat">Database</span><span class="stack-val">SQLite → PostgreSQL</span></div>
+    <div class="stack-row"><span class="stack-cat">Dashboard</span><span class="stack-val">Streamlit</span></div>
+    <div class="stack-row"><span class="stack-cat">Alerts</span><span class="stack-val">python-telegram-bot</span></div>
+    <div class="stack-row"><span class="stack-cat">Scheduler</span><span class="stack-val">APScheduler / cron</span></div>
+    <div class="stack-row"><span class="stack-cat">Config</span><span class="stack-val">YAML + Pydantic</span></div>
+    <div class="stack-row"><span class="stack-cat">Charts</span><span class="stack-val">Plotly / mplfinance</span></div>
+    <div class="stack-row"><span class="stack-cat">Testing</span><span class="stack-val">pytest + hypothesis</span></div>
+    <div class="stack-row"><span class="stack-cat">Deployment</span><span class="stack-val">Local → VPS (DigitalOcean / Railway)</span></div>
+    <div class="stack-row"><span class="stack-cat">Version Control</span><span class="stack-val">Git / GitHub (private repo)</span></div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ROADMAP -->
+<section class="section fade-in">
+  <div class="section-label">005 — Build Roadmap</div>
+  <h2 class="section-title">From Zero to Edge</h2>
+  <p class="section-desc">Six focused phases. Each phase delivers something usable before moving to the next.</p>
+
+  <div class="roadmap">
+
+    <div class="phase">
+      <div class="phase-header">
+        <span class="phase-tag">Phase 1</span>
+        <span class="phase-title">Foundation — Data + Signals</span>
+        <span class="phase-duration">Weeks 1–2</span>
+      </div>
+      <div class="phase-items">
+        <div class="phase-item">Price data pipeline (forex + crypto)</div>
+        <div class="phase-item">Core indicator calculations</div>
+        <div class="phase-item">Confluence scoring logic</div>
+        <div class="phase-item">First signal firing to console</div>
+        <div class="phase-item">SQLite trade & signal storage</div>
+        <div class="phase-item">Project structure & config system</div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-header">
+        <span class="phase-tag">Phase 2</span>
+        <span class="phase-title">Backtesting Engine</span>
+        <span class="phase-duration">Weeks 3–4</span>
+      </div>
+      <div class="phase-items">
+        <div class="phase-item">Historical data warehouse</div>
+        <div class="phase-item">vectorbt integration</div>
+        <div class="phase-item">Win rate / Sharpe / drawdown metrics</div>
+        <div class="phase-item">Walk-forward testing</div>
+        <div class="phase-item">Strategy comparison reports</div>
+        <div class="phase-item">CSV export</div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-header">
+        <span class="phase-tag">Phase 3</span>
+        <span class="phase-title">AI Intelligence Layer</span>
+        <span class="phase-duration">Weeks 5–6</span>
+      </div>
+      <div class="phase-items">
+        <div class="phase-item">Claude API integration</div>
+        <div class="phase-item">Signal narration prompts</div>
+        <div class="phase-item">News feed ingestion</div>
+        <div class="phase-item">Regime detection logic</div>
+        <div class="phase-item">AI risk commentary</div>
+        <div class="phase-item">Trade review engine</div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-header">
+        <span class="phase-tag">Phase 4</span>
+        <span class="phase-title">Risk Manager + Alerts</span>
+        <span class="phase-duration">Weeks 7–8</span>
+      </div>
+      <div class="phase-items">
+        <div class="phase-item">Position sizing calculator</div>
+        <div class="phase-item">Daily loss circuit breaker</div>
+        <div class="phase-item">Streak detection logic</div>
+        <div class="phase-item">Telegram bot setup</div>
+        <div class="phase-item">Rich signal alert cards</div>
+        <div class="phase-item">EOD performance summary</div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-header">
+        <span class="phase-tag">Phase 5</span>
+        <span class="phase-title">Dashboard + Journal</span>
+        <span class="phase-duration">Weeks 9–10</span>
+      </div>
+      <div class="phase-items">
+        <div class="phase-item">Streamlit control center</div>
+        <div class="phase-item">Live signal feed UI</div>
+        <div class="phase-item">P&L curve & heatmaps</div>
+        <div class="phase-item">Automated trade journal</div>
+        <div class="phase-item">AI weekly behavioral review</div>
+        <div class="phase-item">Backtest results visualizer</div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-header">
+        <span class="phase-tag">Phase 6</span>
+        <span class="phase-title">Live Deployment</span>
+        <span class="phase-duration">Weeks 11–12</span>
+      </div>
+      <div class="phase-items">
+        <div class="phase-item">VPS deployment (always-on)</div>
+        <div class="phase-item">Real capital — small ($10–$50)</div>
+        <div class="phase-item">Performance vs backtest comparison</div>
+        <div class="phase-item">Strategy tuning loop</div>
+        <div class="phase-item">Monitoring & uptime alerts</div>
+        <div class="phase-item">Iteration based on real results</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="warning-box">
+    <strong>⚠️ Important:</strong> Binary options and short-term trading carry significant financial risk. Msomi is designed to maximize discipline and minimize emotional trading — but no system eliminates market risk. Always start with the minimum deposit, never trade money you cannot afford to lose, and treat Phase 1–5 as pure research and learning before any real capital goes in.
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-logo">Msomi</div>
+  <div class="footer-tagline">The educated trader · Personal · Systematic · AI-powered</div>
+</footer>
+
+<script>
+  // Scroll fade-in
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.1 });
+
+  document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
