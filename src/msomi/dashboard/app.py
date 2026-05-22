@@ -211,7 +211,10 @@ def _page_live_feed():
     with right:
         st.subheader("Equity Curve")
         fig=_equity_fig(cfg.account.balance)
-        st.plotly_chart(fig,use_container_width=True) if fig.data else st.info("No closed trades yet.")
+        if fig.data:
+            st.plotly_chart(fig,use_container_width=True)
+        else:
+            st.info("No closed trades yet.")
     st.divider()
 
     st.subheader("Watchlist Prices")
