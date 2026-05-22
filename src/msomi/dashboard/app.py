@@ -413,6 +413,22 @@ def _page_live_feed():
 
 # ── Analysis helpers ────────────────────────────────────────────────────────
 
+def _next_candle_close(timeframe: str):
+    """Return (close_dt_utc, minutes_remaining, friendly_str) for current candle."""
+    tf_mins={"1m":1,"5m":5,"15m":15,"30m":30,"1h":60,"4h":240,"1d":1440}
+    mins=tf_mins.get(timeframe,60)
+    now=datetime.now(timezone.utc)
+    total_m=now.hour*60+now.minute
+    candle_end_m=((total_m//mins)+1)*mins
+    close_h=(candle_end_m%1440)//60
+    close_min=candle_end_m%60
+    close_dt=now.replace(hour=close_h,minute=close_min,second=0,microsecond=0)
+    if close_dt<=now: close_dt=close_dt+__import__("datetime").timedelta(days=1)
+    remaining=max(1,int((close_dt-now).total_seconds()//60))
+    h_r=remaining//60; m_r=remaining%60
+    friendly=f"{h_r}h {m_r}m" if h_r>0 else f"{m_r}m"
+    return close_dt,remaining,friendly
+
 def _plain_english_analysis(snap):
     """Plain-English bullet list explaining current indicator state."""
     lines = []
@@ -534,48 +550,6 @@ def _page_charts():
     if not fig.data:
         st.warning("Could not load data for this symbol."); return
     st.plotly_chart(fig,use_container_width=True)
-
-    if df is not None and not df.empty:
-        s1,s2,s3=st.columns(3)
-        tail=60
-        with s1:
-            rsi_fig=go.Figure()
-            rsi_fig.add_trace(go.Scatter(x=df.index[-tail:],y=df["rsi"].iloc[-tail:],
-                                         mode="lines",line=dict(color="#c9a84c",width=1.5),name="RSI"))
-            rsi_fig.add_hline(y=70,line_dash="dot",line_color="#e05a5a",line_width=1)
-            rsi_fig.add_hline(y=30,line_dash="dot",line_color="#2ecc8a",line_width=1)
-            rsi_fig.add_hrect(y0=70,y1=100,fillcolor="rgba(224,90,90,0.05)",line_width=0)
-            rsi_fig.add_hrect(y0=0,y1=30,fillcolor="rgba(46,204,138,0.05)",line_width=0)
-            rsi_fig.update_layout(template="plotly_dark",paper_bgcolor="#0e1117",plot_bgcolor="#0e1117",
-                                  height=200,margin=dict(l=0,r=0,t=30,b=0),showlegend=False,
-                                  title=dict(text="RSI (14)",font=dict(color="#c9a84c",size=12)),
-                                  yaxis=dict(range=[0,100],showgrid=True,gridcolor="#1a1d2e"),
-                                  xaxis=dict(showgrid=True,gridcolor="#1a1d2e"))
-            st.plotly_chart(rsi_fig,use_container_width=True)
-        with s2:
-            mc=["#2ecc8a" if v>=0 else "#e05a5a" for v in df["macd_hist"].iloc[-tail:]]
-            mf=go.Figure()
-            mf.add_trace(go.Bar(x=df.index[-tail:],y=df["macd_hist"].iloc[-tail:],marker_color=mc,name="Hist"))
-            mf.add_trace(go.Scatter(x=df.index[-tail:],y=df["macd"].iloc[-tail:],
-                                    mode="lines",line=dict(color="#7b9fe0",width=1),name="MACD"))
-            mf.add_trace(go.Scatter(x=df.index[-tail:],y=df["macd_signal"].iloc[-tail:],
-                                    mode="lines",line=dict(color="#e07bbb",width=1),name="Signal"))
-            mf.update_layout(template="plotly_dark",paper_bgcolor="#0e1117",plot_bgcolor="#0e1117",
-                              height=200,margin=dict(l=0,r=0,t=30,b=0),showlegend=False,
-                              title=dict(text="MACD (12,26,9)",font=dict(color="#c9a84c",size=12)),
-                              xaxis=dict(showgrid=True,gridcolor="#1a1d2e"),
-                              yaxis=dict(showgrid=True,gridcolor="#1a1d2e"))
-            st.plotly_chart(mf,use_container_width=True)
-        with s3:
-            vc=["#2ecc8a" if c>=o else "#e05a5a"
-                for c,o in zip(df["close"].iloc[-tail:],df["open"].iloc[-tail:])]
-            vf=go.Figure(go.Bar(x=df.index[-tail:],y=df["volume"].iloc[-tail:],marker_color=vc,name="Volume"))
-            vf.update_layout(template="plotly_dark",paper_bgcolor="#0e1117",plot_bgcolor="#0e1117",
-                             height=200,margin=dict(l=0,r=0,t=30,b=0),showlegend=False,
-                             title=dict(text="Volume",font=dict(color="#c9a84c",size=12)),
-                             xaxis=dict(showgrid=True,gridcolor="#1a1d2e"),
-                             yaxis=dict(showgrid=True,gridcolor="#1a1d2e"))
-            st.plotly_chart(vf,use_container_width=True)
 
     # ── RSI / MACD / Volume sub-panels ─────────────────────────────────────
     if df is not None and not df.empty:
@@ -705,6 +679,42 @@ def _page_charts():
                                   xaxis=dict(showgrid=True,gridcolor="#1a1d2e"),
                                   yaxis=dict(showgrid=True,gridcolor="#1a1d2e"))
                 st.plotly_chart(cf,use_container_width=True)
+
+    # ── Exact Next Steps ──────────────────────────────────────────────────
+    if snap and event and label not in ("WAIT / NEUTRAL","NO DATA"):
+        st.divider()
+        s=event.signal
+        sym_clean=symbol.replace("=X","").replace("-USD","")
+        close_dt,mins_left,friendly_left=_next_candle_close(timeframe)
+        close_str=close_dt.strftime("%H:%M UTC")
+        dollar_risk=cfg.account.balance*cfg.risk.per_trade_pct
+        pot_gain=dollar_risk*s.risk_reward
+        direction_word="BUY" if s.direction=="LONG" else "SELL"
+        atr_guard=snap.atr
+        is_forex="=X" in symbol
+        sl_pips=abs(s.entry_price-s.stop_loss)/0.0001 if is_forex else abs(s.entry_price-s.stop_loss)
+        unit_label="pips" if is_forex else "pts"
+        dc="#2ecc8a" if s.direction=="LONG" else "#e05a5a"
+        st.markdown(f"<h3 style='color:{dc}'>Your Exact Next Steps — Do This Now</h3>",unsafe_allow_html=True)
+        steps=[
+            f"📱 **Open your broker app** (PocketOption, MetaTrader, or whichever you use)",
+            f"🔍 **Search for `{sym_clean}`** and open its chart",
+            f"📊 **Confirm the price is near `{s.entry_price:.5f}`** — if price has moved more than `{atr_guard:.5f}` ({atr_guard/s.entry_price*100:.2f}%), skip this trade and wait for the next candle",
+            f"{'\u2705' if s.direction=='LONG' else '\u274c'} **Place a {direction_word} order at `{s.entry_price:.5f}`** ({sym_clean})",
+            f"🛑 **Set Stop Loss at `{s.stop_loss:.5f}`** — that's `{sl_pips:.1f} {unit_label}` away. This limits your max loss to **${dollar_risk:.2f}** ({cfg.risk.per_trade_pct*100:.0f}% of account)",
+            f"🎯 **Set Take Profit at `{s.take_profit:.5f}`** — if price reaches this you earn **${pot_gain:.2f}** (R:R = {s.risk_reward:.1f}:1)",
+            f"⏰ **Come back at {close_str}** (in ~{friendly_left}) when the {timeframe} candle closes — then re-evaluate",
+            f"📝 **Screenshot your entry** or click Save below to track your result",
+        ]
+        for i,step in enumerate(steps,1):
+            st.markdown(f"**{i}.** {step}")
+        st.info(f"⚠️ Always use your Stop Loss. Never risk money you can't afford to lose. Signal confidence: **{s.score}/100**.")
+        if st.button("📌 Save signal to AI Tracker",key="ta_save_sig",type="secondary"):
+            try:
+                journal.log_signal(event,ai_analysis=f"Score {s.score} | " + " | ".join(s.reasons[:3]))
+                st.success("✅ Saved! Go to **AI Tracker** to monitor the result.")
+            except Exception as exc:
+                st.error(f"Could not save: {exc}")
 
 # ── Page: Heatmap ─────────────────────────────────────────────────────────────
 
@@ -1258,37 +1268,207 @@ def _page_backtest():
             st.dataframe(df_t.style.applymap(_co,subset=["Result"]).applymap(_cp,subset=["P&L%","P&L $"]),
                          use_container_width=True,hide_index=True,height=400)
 
+# ── Page: AI Prediction Tracker ──────────────────────────────────────────────────
+
+def _page_predictions():
+    st.title("🤖 AI Signal Tracker")
+    st.caption("Every signal this system fires is auto-tracked here. Watch predictions play out against the real market.")
+
+    sigs=journal.recent_signals(limit=200)
+    if not sigs:
+        st.info("🔍 No signals tracked yet.  \nGo to **Trade Analyzer** or wait for **Live Feed** to auto-scan. Every fired signal is saved automatically.")
+        return
+
+    # Resolve each signal against current price
+    predictions=[]
+    correct=0; resolved=0
+    for sig in sigs:
+        sym=sig.get("symbol","")
+        direction=sig.get("direction","")
+        entry=sig.get("entry_price") or 0
+        tp=sig.get("take_profit") or 0
+        sl=sig.get("stop_loss") or 0
+        score=sig.get("confidence_score") or 0
+        ts=sig.get("created_at")
+        try: current=fetch_latest_price(sym)
+        except Exception: current=None
+        if current and entry:
+            if direction=="LONG":
+                pnl_pct=(current-entry)/entry*100
+                if current>=tp: outcome="✅ TP HIT"; oc="#2ecc8a"; correct+=1; resolved+=1
+                elif current<=sl: outcome="❌ SL HIT"; oc="#e05a5a"; resolved+=1
+                elif current>entry: outcome="📈 In Profit"; oc="#7bc67e"
+                else: outcome="📉 In Loss"; oc="#c9a84c"
+            else:
+                pnl_pct=(entry-current)/entry*100
+                if current<=tp: outcome="✅ TP HIT"; oc="#2ecc8a"; correct+=1; resolved+=1
+                elif current>=sl: outcome="❌ SL HIT"; oc="#e05a5a"; resolved+=1
+                elif current<entry: outcome="📈 In Profit"; oc="#7bc67e"
+                else: outcome="📉 In Loss"; oc="#c9a84c"
+        else:
+            pnl_pct=0; outcome="⏳ Loading…"; oc="#3b3f5c"
+        predictions.append(dict(sym=sym,direction=direction,entry=entry,tp=tp,sl=sl,
+                                score=score,ts=ts,current=current,pnl_pct=pnl_pct,
+                                outcome=outcome,oc=oc))
+
+    # ── Summary header ───────────────────────────────────────────────────
+    accuracy=correct/resolved*100 if resolved>0 else 0
+    acc_color="#2ecc8a" if accuracy>=55 else "#c9a84c" if accuracy>=45 else "#e05a5a"
+    a1,a2,a3,a4=st.columns(4)
+    a1.metric("Total Signals",len(predictions))
+    a2.metric("Resolved",resolved,help="TP or SL was hit")
+    a3.metric("AI Accuracy",f"{accuracy:.0f}%",delta=f"{accuracy-50:+.0f}% vs random")
+    a4.metric("Pending",len(predictions)-resolved,help="Trade still open")
+    if resolved>=5:
+        st.markdown(f"""
+        <div style="background:{acc_color}12;border-left:4px solid {acc_color};border-radius:8px;padding:14px 20px;margin:10px 0">
+          <strong style="color:{acc_color};font-size:1.1em">
+            {'This AI has been right ' + str(correct) + ' out of ' + str(resolved) + ' resolved calls (' + f"{accuracy:.0f}" + '%).'}
+          </strong><br/>
+          <span style="color:#8890a8;font-size:.9em">
+            {'Solid edge.' if accuracy>=60 else 'Room to improve — review the losing signals for patterns.' if accuracy>=45 else 'More data needed. Check if market conditions have changed.'}
+          </span>
+        </div>""",unsafe_allow_html=True)
+    st.divider()
+
+    # ── Prediction cards ───────────────────────────────────────────────────
+    for p in predictions[:40]:
+        dc="#2ecc8a" if p["direction"]=="LONG" else "#e05a5a"
+        arrow="▲" if p["direction"]=="LONG" else "▼"
+        sym_c=(p["sym"] or "").replace("=X","").replace("-USD","")
+        price_str=f"{p['current']:.5f}" if p["current"] else "–"
+        pnl_str=f"{p['pnl_pct']:+.2f}%" if p["pnl_pct"] else "–"
+        pnl_c="#2ecc8a" if p["pnl_pct"]>0 else "#e05a5a" if p["pnl_pct"]<0 else "#8890a8"
+        ts_str=""
+        if p["ts"]:
+            try: ts_str=datetime.fromisoformat(str(p["ts"])).strftime("%b %d %H:%M")
+            except Exception: ts_str=str(p["ts"])[:16]
+        sc=_score_color(p["score"])
+        # movement description
+        if p["current"] and p["entry"]:
+            move_pct=abs(p["pnl_pct"])
+            move_dir="rose" if p["pnl_pct"]>0 else "fell"
+            if p["direction"]=="LONG":
+                verdict_text=f"Price {move_dir} {move_pct:.2f}% — {'in your favour' if p['pnl_pct']>0 else 'against you'}"
+            else:
+                verdict_text=f"Price {move_dir} {move_pct:.2f}% — {'in your favour' if p['pnl_pct']>0 else 'against you'}"
+        else:
+            verdict_text="Waiting for price data…"
+        st.markdown(f"""
+        <div style="background:#141720;border-radius:10px;padding:14px 18px;margin-bottom:8px;
+             border-left:4px solid {p['oc']}">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <div>
+              <span style="font-size:1.1em;font-weight:700;color:#e0e0e0">{sym_c}</span>
+              <span style="color:{dc};font-weight:600;margin:0 10px">{arrow} {p['direction']}</span>
+              <span style="background:{sc}22;color:{sc};padding:2px 8px;border-radius:5px;font-size:.82em">Score {p['score']}</span>
+            </div>
+            <div style="text-align:right">
+              <span style="color:{p['oc']};font-weight:700;font-size:1.05em">{p['outcome']}</span>
+              <span style="color:{pnl_c};margin-left:12px;font-weight:600">{pnl_str}</span>
+              <span style="color:#8890a8;font-size:.8em;margin-left:12px">{ts_str}</span>
+            </div>
+          </div>
+          <div style="margin-top:8px;display:flex;gap:20px;font-size:.85em;flex-wrap:wrap">
+            <span style="color:#8890a8">Predicted entry <code style="color:#e0e0e0">{p['entry']:.5f}</code></span>
+            <span style="color:#8890a8">Current <code style="color:#c9a84c">{price_str}</code></span>
+            <span style="color:#8890a8">TP <code style="color:#2ecc8a">{p['tp']:.5f}</code></span>
+            <span style="color:#8890a8">SL <code style="color:#e05a5a">{p['sl']:.5f}</code></span>
+          </div>
+          <div style="margin-top:6px;color:#5a6080;font-size:.82em">{verdict_text}</div>
+        </div>""",unsafe_allow_html=True)
+
 # ── Page: Settings ────────────────────────────────────────────────────────────
 
 def _page_settings():
     st.title("⚙️ Settings")
-    cl,cr=st.columns(2)
-    with cl:
-        with st.expander("Risk",expanded=True):
-            rc=cfg.risk
-            st.metric("Risk/Trade",f"{rc.per_trade_pct*100:.1f}%")
-            st.metric("Daily Loss Limit",f"{rc.daily_loss_limit_pct*100:.1f}%")
-            st.metric("Weekly DD Limit",f"{rc.weekly_drawdown_limit_pct*100:.1f}%")
-            st.metric("Max Consecutive Losses",rc.max_consecutive_losses)
-            st.metric("Min R:R",f"{rc.min_risk_reward}:1")
-            st.metric("Max Open Positions",rc.max_open_positions)
-        with st.expander("AI"):
-            st.metric("Provider",cfg.ai.provider.upper())
-            st.metric("Model",cfg.ai.model_anthropic if cfg.ai.provider=="anthropic" else cfg.ai.model_openai)
-            st.metric("Max Tokens",cfg.ai.max_tokens)
-            st.metric("Temperature",cfg.ai.temperature)
-    with cr:
-        with st.expander("Signals",expanded=True):
-            ind=cfg.signals.indicators
-            st.metric("Min Score",cfg.signals.min_confidence_score)
-            st.metric("Primary TF",cfg.signals.timeframes.get("primary","1h"))
-            st.metric("EMA Fast",ind.ema_fast); st.metric("EMA Slow",ind.ema_slow)
-            st.metric("EMA Trend",ind.ema_trend); st.metric("RSI Period",ind.rsi_period)
-            st.metric("ATR Period",ind.atr_period); st.metric("BB Period",ind.bb_period)
-        with st.expander("Watchlist"):
-            st.markdown("**Forex:**"); st.code("  ".join(cfg.watchlist.forex))
-            st.markdown("**Crypto:**"); st.code("  ".join(cfg.watchlist.crypto))
-    st.info("📝 Edit `config/settings.yaml` to change settings, then restart the dashboard.")
+    st.caption("Adjust your trading parameters. Changes are written to `config/settings.yaml` instantly.")
+
+    import yaml as _yaml
+    _settings_path=os.path.normpath(
+        os.path.join(os.path.dirname(__file__),"..","..","..","config","settings.yaml")
+    )
+
+    ind=cfg.signals.indicators
+    tab1,tab2,tab3=st.tabs(["💰 Account & Risk","📁 Signals & Strategy","📌 Watchlist"])
+
+    with tab1:
+        st.subheader("Account")
+        new_balance=st.number_input("Account Balance ($)",value=float(cfg.account.balance),
+                                    min_value=10.0,step=100.0,key="st_bal")
+        st.caption("This is the balance used for position sizing and risk calculations.")
+        st.subheader("Risk Management")
+        new_risk_pct=st.slider("Risk per Trade (%)",0.25,5.0,float(cfg.risk.per_trade_pct*100),
+                               step=0.25,key="st_rpt",
+                               help="% of your balance you're willing to lose per trade. Beginners: use 1-2%.")
+        st.caption(f"💡 At {new_risk_pct:.2f}% risk on ${new_balance:,.0f} you risk **${new_balance*new_risk_pct/100:.2f}** per trade.")
+        new_daily_loss=st.slider("Daily Loss Limit (%)",1.0,30.0,float(cfg.risk.daily_loss_limit_pct*100),
+                                 step=1.0,key="st_dll",
+                                 help="Circuit breaker trips when your day's loss hits this.")
+        new_max_streak=st.number_input("Circuit Breaker: Max Consecutive Losses",
+                                       value=int(cfg.risk.max_consecutive_losses),
+                                       min_value=1,max_value=20,step=1,key="st_mcs")
+        new_min_rr=st.slider("Minimum R:R Ratio",1.0,5.0,float(cfg.risk.min_risk_reward),
+                             step=0.5,key="st_mrr",
+                             help="Only take trades where potential gain is at least this many times your risk.")
+        new_max_pos=st.number_input("Max Open Positions",value=int(cfg.risk.max_open_positions),
+                                    min_value=1,max_value=20,step=1,key="st_mop")
+
+    with tab2:
+        st.subheader("Signal Engine")
+        new_min_score=st.slider("Minimum Confidence Score (live signals)",30,90,
+                                int(cfg.signals.min_confidence_score),key="st_msc",
+                                help="Only fire a live signal if the confluence score is above this.")
+        st.caption(f"💡 Currently set to **{new_min_score}**. Higher = fewer, higher-quality signals. Lower = more signals, lower quality.")
+        tfs=["5m","15m","1h","4h","1d"]
+        cur_primary=cfg.signals.timeframes.get("primary","1h")
+        new_primary_tf=st.selectbox("Primary Timeframe",tfs,
+                                    index=tfs.index(cur_primary) if cur_primary in tfs else 2,
+                                    key="st_ptf")
+        st.subheader("Indicator Periods")
+        c1,c2=st.columns(2)
+        with c1:
+            new_ema_fast=st.number_input("EMA Fast",value=int(ind.ema_fast),min_value=5,max_value=50,key="st_ef")
+            new_ema_slow=st.number_input("EMA Slow",value=int(ind.ema_slow),min_value=20,max_value=100,key="st_es")
+            new_rsi_period=st.number_input("RSI Period",value=int(ind.rsi_period),min_value=5,max_value=30,key="st_rp")
+        with c2:
+            new_bb_period=st.number_input("BB Period",value=int(ind.bb_period),min_value=10,max_value=50,key="st_bp")
+            new_atr_period=st.number_input("ATR Period",value=int(ind.atr_period),min_value=5,max_value=30,key="st_ap")
+
+    with tab3:
+        st.subheader("Forex Watchlist")
+        st.caption("One symbol per line. Include the `=X` suffix for forex pairs.")
+        new_forex=st.text_area("Forex",value="\n".join(cfg.watchlist.forex),height=160,key="st_fx")
+        st.subheader("Crypto Watchlist")
+        st.caption("One symbol per line. Include `-USD` suffix.")
+        new_crypto=st.text_area("Crypto",value="\n".join(cfg.watchlist.crypto),height=120,key="st_cr")
+
+    st.divider()
+    if st.button("💾 Save All Settings",type="primary",use_container_width=True,key="st_save"):
+        try:
+            with open(_settings_path) as f: raw=_yaml.safe_load(f)
+            raw["account"]["balance"]=float(new_balance)
+            raw["risk"]["per_trade_pct"]=round(new_risk_pct/100,4)
+            raw["risk"]["daily_loss_limit_pct"]=round(new_daily_loss/100,4)
+            raw["risk"]["max_consecutive_losses"]=int(new_max_streak)
+            raw["risk"]["min_risk_reward"]=float(new_min_rr)
+            raw["risk"]["max_open_positions"]=int(new_max_pos)
+            raw["signals"]["min_confidence_score"]=int(new_min_score)
+            raw["signals"]["timeframes"]["primary"]=new_primary_tf
+            raw["signals"]["indicators"]["ema_fast"]=int(new_ema_fast)
+            raw["signals"]["indicators"]["ema_slow"]=int(new_ema_slow)
+            raw["signals"]["indicators"]["rsi_period"]=int(new_rsi_period)
+            raw["signals"]["indicators"]["bb_period"]=int(new_bb_period)
+            raw["signals"]["indicators"]["atr_period"]=int(new_atr_period)
+            raw["watchlist"]["forex"]=[x.strip() for x in new_forex.strip().split("\n") if x.strip()]
+            raw["watchlist"]["crypto"]=[x.strip() for x in new_crypto.strip().split("\n") if x.strip()]
+            with open(_settings_path,"w") as f:
+                _yaml.dump(raw,f,default_flow_style=False,allow_unicode=True,sort_keys=False)
+            st.success("✅ Settings saved to `config/settings.yaml`. **Restart the dashboard** to apply changes.")
+            st.balloons()
+        except Exception as e:
+            st.error(f"Failed to save settings: {e}")
+    st.info("💡 Tip: after saving, press **Ctrl+C** in the terminal and run `msomi dashboard` again to reload.")
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
@@ -1298,7 +1478,7 @@ with st.sidebar:
                 unsafe_allow_html=True)
     st.divider()
     page=st.radio("Navigate",
-                  ["Live Feed","Trade Analyzer","Heatmap","Signals","Journal","Risk Calculator","Strategy Lab","Settings"],
+                  ["Live Feed","Trade Analyzer","Heatmap","Signals","Journal","AI Tracker","Risk Calculator","Strategy Lab","Settings"],
                   index=0)
     st.divider()
     state=circuit_breaker.state
@@ -1323,6 +1503,7 @@ elif page=="Trade Analyzer": _page_charts()
 elif page=="Heatmap": _page_heatmap()
 elif page=="Signals": _page_signals()
 elif page=="Journal": _page_journal()
+elif page=="AI Tracker": _page_predictions()
 elif page=="Risk Calculator": _page_planner()
 elif page=="Strategy Lab": _page_backtest()
 elif page=="Settings": _page_settings()
